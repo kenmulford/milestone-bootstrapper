@@ -1,0 +1,33 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python bytecode cache (e.g. from any CI gate scripts under scripts/)
+__pycache__/
+*.pyc
+
+# Logs and scratch
+*.log
+/tmp/
+/scratch/
+
+# milestone-driver per-clone runtime markers (preflight notice, Trello notice,
+# tests-green stamp, triage cache) — never commit the driver's clone-local state
+# into this repo. NOTE: does not match .milestone-config/ (the committed profile).
+.milestone-driver-*
+
+# milestone-driver parallel-mode worktree fleet scratch dir (per-clone)
+.milestone-driver-worktrees/
+
+# milestone-feeder plan preview plan-scratch (per-run, e.g.
+# .milestone-feeder/plan-<slug>.md) — reviewed and discarded, never committed.
+# NOTE: does not match .milestone-config/ (the committed feeder/driver profiles).
+# Un-anchored so it matches at any depth (e.g. under tests/scenarios/<n>/).
+.milestone-feeder/
