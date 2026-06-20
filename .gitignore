@@ -25,6 +25,13 @@ __pycache__/
 
 # milestone-driver parallel-mode worktree fleet scratch dir (per-clone)
 .milestone-driver-worktrees/
+# new canonical worktree-fleet path (driver 1.10.0+): .milestone-config/worktrees/
+.milestone-config/worktrees/
+# clone-local driver runtime state under .milestone-config/ (notices, caches, stamps)
+.milestone-config/preflight-notice
+.milestone-config/trello-notice
+.milestone-config/triage-cache.json
+.milestone-config/tests-stamp
 
 # milestone-feeder plan preview plan-scratch (per-run, e.g.
 # .milestone-feeder/plan-<slug>.md) — reviewed and discarded, never committed.
