@@ -8,7 +8,16 @@ It also makes the repo ready for `milestone-driver` to build in. It provisions t
 
 It's a Claude Code plugin with three commands. `plan` interviews you and previews what it would write. `apply` writes it all. `update` syncs it when your project changes later.
 
-**Install it** — this also pulls in the required `superpowers` plugin. Restart Claude Code afterward so the plugins load:
+**Install it** — either way pulls in the required `superpowers` plugin. Restart Claude Code afterward so the plugins load.
+
+Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all three suite plugins (`milestone-bootstrapper`, `milestone-feeder`, `milestone-driver`). Add one marketplace and install any of them:
+
+```
+/plugin marketplace add kenmulford/milestone-suite
+/plugin install milestone-bootstrapper@milestone-suite
+```
+
+Or install just this plugin from its own marketplace — still supported:
 
 ```
 /plugin marketplace add kenmulford/milestone-bootstrapper
