@@ -12,7 +12,10 @@
   "plugins": [
     {
       "source": "./",
-      "name": "milestone-bootstrapper"
+      "name": "milestone-bootstrapper",
+      "description": "Populate a repository's .project/ house docs from canonical templates and make the repo suite-ready, so milestone-feeder and milestone-driver have grounded conventions to plan and build against. Authors no code.",
+      "category": "development",
+      "tags": ["github", "milestones", "issues", "automation", "project-docs", "templates", "scaffolding", "bootstrap"]
     }
   ]
 }
