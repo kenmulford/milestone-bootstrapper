@@ -2,9 +2,13 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
-## milestone-bootstrapper v0.1.1 — grounding seam
+## v0.1.1 — grounding seam
+
+_Released 2026-06-22._
 
 **Theme:** Provision one `projectDocs` pointer for both consumers in a single bootstrap pass, so the feeder and driver resolve the project's standing-docs directory from the same place and cannot drift.
+
+This is the first versioned release of milestone-bootstrapper; versioned releases begin here at v0.1.1. The v0.1.0 entry below was authored before versioning, when the plugin shipped version-free.
 
 ### ✨ Grounding seam
 
@@ -17,7 +21,6 @@ Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
 - Additive, optional `projectDocs` key — a bootstrapped repo with the docs dir left at the default `.project/` is byte-for-byte unchanged (omit-when-default preserves current behavior). A customized docs dir now lands the identical value in both `feeder.json` and `driver.json`.
 - Emits ahead of the sibling `milestone-driver` schema/consumer by the deliberate "safe to ship independently and first" decision; the driver consumer treats absent `projectDocs` as `.project/`, so there is no behavior regression while the sibling driver-side reader is pending.
-- Version-free mode — no per-PR version bump.
 
 ### ⚖️ Post-run audit trail
 
