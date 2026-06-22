@@ -19,5 +19,5 @@
     "Claude Code plugin: markdown skills + bash-first/pwsh-fallback hooks",
     "Cross-platform: bash (jq) and PowerShell 7+"
   ],
-  "versioning": false
+  "versioning": "semver"
 }
