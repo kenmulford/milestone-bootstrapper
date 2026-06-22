@@ -1,5 +1,5 @@
 {
-  "integrationBranch": "develop",
+  "integrationBranch": "milestone/grounding-v0.1.1",
   "protectedBranch": "main",
   "sourceGlobs": [
     "skills/**",
