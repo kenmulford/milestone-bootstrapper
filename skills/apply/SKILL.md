@@ -133,6 +133,7 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 ./scripts/write-driver-config.sh --repo "<repo>" \
   --integration-branch "<integration>" --protected-branch "<protected>" \
   --source-globs '<json string[]>' \
+  [--project-docs "<path>"] \
   [--domain-skills '<json string[]>'] [--versioning false] [--ui-surface-globs '<json>'] \
   [--unit-test-cmd "<cmd>"] [--preflight-cmd "<cmd>"] [--e2e-env '<json>']
 ```
@@ -140,9 +141,10 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 ```powershell
 # PowerShell 7+ — the behaviorally-equivalent twins (PascalCase -Flag params).
 ./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Reviewer "<val>"]
-./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
+./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-ProjectDocs "<path>"] [-DomainSkills '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 
+- **`--project-docs` / `-ProjectDocs`** → pass the SAME Step-0-resolved project-docs value to BOTH writers, so `feeder.json#projectDocs` and `driver.json#projectDocs` cannot diverge. `apply` passes the resolved value uniformly; the writer itself omits the key when it equals the default `.project/` (omit-when-default lives in the writer, not in `apply`).
 - **`domainSkills` empty / `none`** → omit `--domain-skills`; the key is absent (not written as `[]`) — a recorded "none", never a fabricated skill (issue AC-3; `scripts/write-driver-config.sh` absent-means-default).
 - **`versioning`** → `--versioning false` only when the plan recorded `versioning: false`; omit otherwise (absent-means-versioned).
 - Both writers are idempotent: a re-run whose assembled object is byte-identical to the existing file leaves it untouched (true no-op; `scripts/write-feeder-config.sh` Behavior).
