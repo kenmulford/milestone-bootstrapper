@@ -38,6 +38,17 @@
 #   in this writer's plan-driven input set. If the driver schema gains or renames
 #   a key this writer emits, update this script in lockstep.
 #
+#   GUARDRAIL EXEMPTION — projectDocs: `projectDocs` is an INTENTIONALLY-emitted
+#   additive key that ships AHEAD of the sibling driver schema
+#   (milestone-driver/docs/profile-schema.md) and its consumer. This is a
+#   recorded, deliberate widening — not drift — per docs/efficiency-grounding-plan.md
+#   "Dependencies & sequence" ("Safe to ship independently and first", line 52)
+#   and the tracking issue bootstrapper #38. It mirrors write-feeder-config's
+#   projectDocs (default ".project/", omit-when-default) so the pointer never
+#   drifts between feeder.json and driver.json. The guardrail above still governs
+#   EVERY OTHER key against schema parity; do NOT "un-widen" projectDocs back to
+#   schema parity — that would re-introduce the drift this key exists to prevent.
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   --repo <dir>              target repo root (default: current directory)
@@ -46,6 +57,10 @@
 #     --protected-branch   <str>  e.g. "main"
 #     --source-globs       <json> JSON string[] e.g. '["src/**","tests/**"]'
 #   Optional (OMITTED when not passed — never written as null/empty):
+#     --project-docs       <str>  the resolved `.project/` path (default
+#                                 ".project/"; OMITTED from the file when equal to
+#                                 the bundled default — the omit test is against
+#                                 the BUNDLED default, mirroring write-feeder-config).
 #     --domain-skills      <json> JSON string[]  (#3 stack->domainSkills)
 #     --ui-surface-globs   <json> JSON string[]
 #     --unit-test-cmd      <str>
@@ -56,15 +71,18 @@
 #                                 `false` => write `versioning: false` (the ONLY
 #                                 value ever written for this key).
 #   Env fallbacks (args win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
-#     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_DOMAIN_SKILLS,
-#     DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD,
-#     DRIVER_E2E_ENV, DRIVER_VERSIONING.
+#     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
+#     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
+#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
 #   - Keys the plan does not supply are OMITTED — never written as null/empty.
 #     `implementerAgent` is OMITTED (default-filled; schema:68,144). `versioning`
 #     is OMITTED when versioned, written `false` only for explicit version-free.
+#     `projectDocs` is OMITTED when left at the bundled default ".project/" and
+#     written only for a divergent value (omit-when-default, against the BUNDLED
+#     default — mirroring write-feeder-config.sh:95-98).
 #   - Idempotent / non-destructive: when the assembled object is byte-identical
 #     to the existing file, it is left untouched (true no-op); re-runs never
 #     duplicate. It never deletes a leftover legacy root milestone-driver.json
@@ -80,11 +98,19 @@
 
 set -euo pipefail
 
+# --- Bundled default (mirror milestone-feeder/docs/profile-schema.md; the shared
+# projectDocs pointer's default — see write-feeder-config.sh:58) -----------------
+readonly DEFAULT_PROJECT_DOCS=".project/"
+
 # --- Inputs (args override env; env overrides unset) ---------------------------
 REPO="${DRIVER_REPO:-.}"
 INTEGRATION_BRANCH="${DRIVER_INTEGRATION_BRANCH:-}"
 PROTECTED_BRANCH="${DRIVER_PROTECTED_BRANCH:-}"
 SOURCE_GLOBS="${DRIVER_SOURCE_GLOBS:-}"
+# projectDocs resolves to its bundled default when unset (it has a real default,
+# unlike the UNSET-sentinel optional keys below); the omit-when-default test in the
+# filter assembly drops it when still equal to the default (write-feeder-config.sh:63).
+PROJECT_DOCS="${DRIVER_PROJECT_DOCS:-$DEFAULT_PROJECT_DOCS}"
 DOMAIN_SKILLS="${DRIVER_DOMAIN_SKILLS:-}"
 UI_SURFACE_GLOBS="${DRIVER_UI_SURFACE_GLOBS:-}"
 UNIT_TEST_CMD="${DRIVER_UNIT_TEST_CMD:-}"
@@ -109,6 +135,7 @@ while [ "$#" -gt 0 ]; do
     --integration-branch) INTEGRATION_BRANCH="${2:?--integration-branch needs a value}"; shift 2 ;;
     --protected-branch)   PROTECTED_BRANCH="${2:?--protected-branch needs a value}"; shift 2 ;;
     --source-globs)       SOURCE_GLOBS="${2:?--source-globs needs a value}"; shift 2 ;;
+    --project-docs)       PROJECT_DOCS="${2:?--project-docs needs a value}"; shift 2 ;;
     --domain-skills)      DOMAIN_SKILLS="${2:?--domain-skills needs a value}"; shift 2 ;;
     --ui-surface-globs)   UI_SURFACE_GLOBS="${2:?--ui-surface-globs needs a value}"; shift 2 ;;
     --unit-test-cmd)      UNIT_TEST_CMD="${2?--unit-test-cmd needs a value}"; shift 2 ;;
@@ -184,6 +211,14 @@ filter="${filter} | .integrationBranch = \$integrationBranch"
 filter="${filter} | .protectedBranch = \$protectedBranch"
 filter="${filter} | .sourceGlobs = \$sourceGlobs"
 
+# projectDocs is the FIRST optional key (slot immediately after the Core keys),
+# emitted ONLY when it diverges from the bundled default — omit-when-default
+# against the BUNDLED default (mirror of write-feeder-config.sh:95-98). Same slot
+# in the .ps1 twin so output stays byte-identical.
+if [ "$PROJECT_DOCS" != "$DEFAULT_PROJECT_DOCS" ]; then
+  filter="${filter} | .projectDocs = \$projectDocs"
+  args+=(--arg projectDocs "$PROJECT_DOCS")
+fi
 if [ "$UI_SURFACE_GLOBS" != "$UNSET" ]; then
   filter="${filter} | .uiSurfaceGlobs = \$uiSurfaceGlobs"
   args+=(--argjson uiSurfaceGlobs "$UI_SURFACE_GLOBS")

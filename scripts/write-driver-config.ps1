@@ -38,6 +38,17 @@
 #   in this writer's plan-driven input set. If the driver schema gains or renames
 #   a key this writer emits, update this script in lockstep.
 #
+#   GUARDRAIL EXEMPTION — projectDocs: `projectDocs` is an INTENTIONALLY-emitted
+#   additive key that ships AHEAD of the sibling driver schema
+#   (milestone-driver/docs/profile-schema.md) and its consumer. This is a
+#   recorded, deliberate widening — not drift — per docs/efficiency-grounding-plan.md
+#   "Dependencies & sequence" ("Safe to ship independently and first", line 52)
+#   and the tracking issue bootstrapper #38. It mirrors write-feeder-config's
+#   projectDocs (default ".project/", omit-when-default) so the pointer never
+#   drifts between feeder.json and driver.json. The guardrail above still governs
+#   EVERY OTHER key against schema parity; do NOT "un-widen" projectDocs back to
+#   schema parity — that would re-introduce the drift this key exists to prevent.
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   -Repo <dir>               target repo root (default: current directory)
@@ -46,6 +57,10 @@
 #     -ProtectedBranch   <str>  e.g. "main"
 #     -SourceGlobs       <json> JSON string[] e.g. '["src/**","tests/**"]'
 #   Optional (OMITTED when not passed — never written as null/empty):
+#     -ProjectDocs       <str>  the resolved `.project/` path (default
+#                               ".project/"; OMITTED from the file when equal to
+#                               the bundled default — the omit test is against the
+#                               BUNDLED default, mirroring write-feeder-config).
 #     -DomainSkills      <json> JSON string[]  (#3 stack->domainSkills)
 #     -UiSurfaceGlobs    <json> JSON string[]
 #     -UnitTestCmd       <str>
@@ -56,15 +71,18 @@
 #                               `false` => write `versioning: false` (the ONLY
 #                               value ever written for this key).
 #   Env fallbacks (params win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
-#     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_DOMAIN_SKILLS,
-#     DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD,
-#     DRIVER_E2E_ENV, DRIVER_VERSIONING.
+#     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
+#     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
+#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
 #   - Keys the plan does not supply are OMITTED — never written as null/empty.
 #     `implementerAgent` is OMITTED (default-filled; schema:68,144). `versioning`
 #     is OMITTED when versioned, written `false` only for explicit version-free.
+#     `projectDocs` is OMITTED when left at the bundled default ".project/" and
+#     written only for a divergent value (omit-when-default, against the BUNDLED
+#     default — mirroring write-feeder-config.ps1:94).
 #   - Idempotent / non-destructive: identical existing content is left byte-
 #     identical (true no-op); re-runs never duplicate. It never deletes a leftover
 #     legacy root milestone-driver.json and never clobbers human edits beyond the
@@ -83,6 +101,7 @@ param(
     [string]$IntegrationBranch,
     [string]$ProtectedBranch,
     [string]$SourceGlobs,
+    [string]$ProjectDocs,
     [string]$DomainSkills,
     [string]$UiSurfaceGlobs,
     [string]$UnitTestCmd,
@@ -95,6 +114,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# --- Bundled default (mirror milestone-feeder/docs/profile-schema.md; the shared
+# projectDocs pointer's default — see write-feeder-config.ps1:64) ----------------
+$DefaultProjectDocs = '.project/'
 
 # --- Inputs (params override env; env overrides unset) -------------------------
 # A param is "supplied" when bound on the command line OR present (non-empty) in
@@ -115,6 +138,14 @@ if (-not $bound.ContainsKey('ProtectedBranch')) {
 }
 if (-not $bound.ContainsKey('SourceGlobs')) {
     $SourceGlobs = if ($env:DRIVER_SOURCE_GLOBS) { $env:DRIVER_SOURCE_GLOBS } else { '' }
+}
+
+# projectDocs resolves to its bundled default when unset (it has a real default,
+# unlike the supplied-ness-tracked optional keys below); the omit-when-default test
+# in the assembly drops it when still equal to the default. Mirror of the feeder
+# twin's param->env->default resolution (write-feeder-config.ps1:71-72).
+if (-not $bound.ContainsKey('ProjectDocs')) {
+    $ProjectDocs = if ($env:DRIVER_PROJECT_DOCS) { $env:DRIVER_PROJECT_DOCS } else { $DefaultProjectDocs }
 }
 
 # Optional keys: track supplied-ness so unset => OMIT, passed-empty => bad input.
@@ -212,6 +243,11 @@ $obj = [ordered]@{}
 $obj['integrationBranch'] = $IntegrationBranch
 $obj['protectedBranch']   = $ProtectedBranch
 $obj['sourceGlobs']       = $sourceGlobsVal
+# projectDocs is the FIRST optional key (slot immediately after the Core keys),
+# emitted ONLY when it diverges from the bundled default — omit-when-default
+# against the BUNDLED default (mirror of write-feeder-config.ps1:94). Same slot as
+# the .sh twin so output stays byte-identical.
+if ($ProjectDocs -ne $DefaultProjectDocs) { $obj['projectDocs'] = $ProjectDocs }
 if ($uiSurfaceGlobsIn.Supplied) { $obj['uiSurfaceGlobs'] = $uiSurfaceGlobsVal }
 if ($writeVersioningFalse)      { $obj['versioning'] = $false }
 if ($unitTestCmdIn.Supplied)    { $obj['unitTestCmd'] = $unitTestCmdIn.Value }

@@ -2,6 +2,30 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.1.1 — grounding seam
+
+_Released 2026-06-22._
+
+**Theme:** Provision one `projectDocs` pointer for both consumers in a single bootstrap pass, so the feeder and driver resolve the project's standing-docs directory from the same place and cannot drift.
+
+This is the first versioned release of milestone-bootstrapper; versioned releases begin here at v0.1.1. The v0.1.0 entry below was authored before versioning, when the plugin shipped version-free.
+
+### ✨ Grounding seam
+
+| Issue | PR | What |
+|---|---|---|
+| #40 Emit projectDocs from both write-driver-config twins (.sh + .ps1), mirroring the feeder writer's omit-when-default discipline | #42 | `scripts/write-driver-config.{sh,ps1}` now emit an additive, optional `projectDocs` key into `driver.json` — default `.project/`, omit-when-default, first optional key — exactly as `write-feeder-config` emits it, with a new `--project-docs` / `-ProjectDocs` input and `DRIVER_PROJECT_DOCS` env fallback. Both twins stay byte-equivalent. |
+| #41 Wire apply's Configs step to pass the resolved projectDocs to the driver writer too | #43 | `skills/apply/` now passes the once-resolved project-docs value to the driver-config writer in both CLI forms, mirroring the feeder invocation — so one bootstrap pass writes the same `projectDocs` into both `feeder.json` and `driver.json`. |
+
+### Consumer notes
+
+- Additive, optional `projectDocs` key — a bootstrapped repo with the docs dir left at the default `.project/` is byte-for-byte unchanged (omit-when-default preserves current behavior). A customized docs dir now lands the identical value in both `feeder.json` and `driver.json`.
+- Emits ahead of the sibling `milestone-driver` schema/consumer by the deliberate "safe to ship independently and first" decision; the driver consumer treats absent `projectDocs` as `.project/`, so there is no behavior regression while the sibling driver-side reader is pending.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: #42 (accepted cross-twin asymmetry on the explicit-empty `-ProjectDocs ''` input — faithfully reproduces the existing feeder-twin behavior and is unreachable via `apply`'s always-resolved value path).
+
 ## milestone-bootstrapper v1 — project brain + suite-ready bootstrap
 
 **Theme:** Capture a project's durable understanding into a populated `.project/` doc set and make the repo suite-ready, so `milestone-feeder` and `milestone-driver` plan and build against grounded house docs and conventions.
