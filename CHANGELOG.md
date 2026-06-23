@@ -2,6 +2,27 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.2.0 — nested-app scaffolding
+
+**Theme:** Scaffold repos whose apps live nested under a subdirectory (e.g. `siteroot/web`, `siteroot/api`), not just at the repo root — while configs and `.project/` stay at the project root.
+
+### ✨ Nested-app scaffolding
+
+| Issue | PR | What |
+|---|---|---|
+| #49 Support a configurable app-root so scaffolded root-level configs can address nested apps | #51 | New plan-file-only `appRoots` field (array, default `["."]`). When set, `plan` discovers the app-roots from the repo layout, runs the stack detector **once per root and unions** the findings into one `.project/` + `nonNegotiables`, and **bakes each app-root as a root-absolute prefix** into the emitted `sourceGlobs`/`uiSurfaceGlobs` (e.g. `siteroot/web/**`). Configs + `.project/` stay at the project root. Default `["."]` is byte-identical to today. |
+| #33 marketplace.json: add description/category/tags to plugin entry (match feeder/driver) | #50 | The `plugins[0]` entry now carries `description`, `category` (`"development"`), and `tags`, matching the milestone-feeder / milestone-driver marketplace shape for cross-suite discoverability. |
+
+### Consumer notes (upgrading from v0.1.1)
+
+- **Nested-app repos** can now be bootstrapped: set `appRoots` (e.g. `["siteroot/web", "siteroot/api"]`) in the plan and the bootstrapper scaffolds against those folders while keeping the shared config + house docs at the repo root. A repo whose app is at the top level needs no change — the default `["."]` produces byte-identical output to v0.1.1.
+- **Bootstrapper-only — no consumer changes.** `appRoots` is a **plan-file-only** field: the baked globs are ordinary root-absolute strings the config writers persist verbatim, so `appRoots` is **never** written into `driver.json`/`feeder.json` and is **not** persisted under `.project/`. milestone-driver and milestone-feeder need no changes to consume a nested-app config.
+- **No schema changes** to `.milestone-config/driver.json` — `appRoots` lives only in the plan-file contract; #33 touched only `.claude-plugin/marketplace.json` (plugin-entry metadata) and bumped `plugin.json` to `0.2.0`.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none.
+
 ## v0.1.1 — grounding seam
 
 _Released 2026-06-22._
