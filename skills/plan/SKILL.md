@@ -31,6 +31,8 @@ Say this to the user before doing any work:
 
 Resolve the **target project-docs path** — where the project docs are written — from `feeder.json#projectDocs` when set, else the default `.project/` (`SPEC.md` §4.1). This is the single resolution; record it once so the plan file's `Target project-docs path` field and every §A entry agree.
 
+Resolve the **app-roots** — the repo-relative directories the project's apps live under — the same way: a single, once-resolved plan-level field (`SPEC.md` §4.1), mirroring the project-docs-path resolution above. **Default `["."]`** — the repo root *is* the app root (today's single-root behavior). A repo whose apps are **nested** while configs + `.project/` stay at the project root (e.g. `siteroot/web`, `siteroot/api`) carries those paths. Step 0 sets only the **default seed** `["."]`; the actual app-roots are **discovered from the layout inspection at the top of Step 2 and confirmed with the human there — before the per-root detector consumes them** (so a nested repo's detector loop iterates the real candidate roots, not the bare default). Record `appRoots` once so the plan file's `App-roots` field, the per-root detection (Step 2), and the baked globs (Step 4) all agree. `appRoots` is a **plan-file-only** field: it is **not** written into `driver.json` / `feeder.json` and **not** persisted under `.project/` (`SPEC.md` §4.1, §6.1) — it shapes the detection loop and the emitted glob *values*, nothing more.
+
 **Check the `gh` precondition up front — surface it, never let it fail silently** ([BRIEF.md:82](../../BRIEF.md); the same precondition discipline the suite holds). Probe `gh` auth/scope read-only:
 
 ```bash
@@ -73,21 +75,35 @@ Honor the engine's recording discipline (`docs/understanding-interview.md` §1, 
 
 This step **captures** the understanding; it records nothing to any doc. The captured field → `##` anchor map is owned by `docs/understanding-interview.md` §2 — do not re-derive it here; carry each answer forward keyed by its anchor for Step 4.
 
-### Step 2 — Detect the stack (#3)
+### Step 2 — Resolve the app-roots from the layout, then detect the stack (#3) — once per app-root, then union
 
-Run the stack detector read-only and consume its TSV output — it reports findings and writes nothing (`scripts/detect-stack.sh` header: "It REPORTS findings; it never writes docs or config"):
+**First, resolve `appRoots` from the repo layout — before the detector loop consumes it.** The per-root detector below iterates `appRoots`, so the real (candidate) app-roots must be discovered *here, ahead of the loop* — otherwise the loop would run over Step 0's bare default `["."]` and a genuinely nested repo would detect once at the repo root, find no manifest, and the per-root detection the feature exists for would never run. Inspect read-only **where the app's source signals live** — are `package.json` / `*.csproj` / `pyproject.toml` / `src/` at the repo root, or nested under one or more subdirectories?
+
+- Repo-root signals → `["."]` (single-root, the default — **byte-identical to today**: the loop runs exactly once against the repo root).
+- Signals nested under `siteroot/web`, `siteroot/api`, etc. → those paths are the candidate app-roots. **Confirm them with the human** against the inspected layout before the loop consumes them.
+
+This is a **read** against current state — it discovers the app-roots and writes nothing. The confirmed `appRoots` is the once-resolved plan-level field from Step 0 (`SPEC.md` §4.1), now grounded in the layout; it drives the per-root detect+union below and the baked globs (Step 4). Step 3's adopt-or-init delta re-states this resolved `appRoots` as part of the read-only reconcile (it confirms, it does not re-discover).
+
+**Then run the stack detector** read-only and consume its TSV output — it reports findings and writes nothing (`scripts/detect-stack.sh` header: "It REPORTS findings; it never writes docs or config"). The detector already accepts a **`[REPO_DIR]` positional** (`scripts/detect-stack.sh` Usage; `scripts/detect-stack.ps1` `-RepoDir`), so the per-app-root loop is **orchestrated here**, not by changing the detector — run it once per resolved `appRoots` entry against that root and **union** the findings:
 
 ```bash
-# bash — read-only stack detection against the repo root.
-./scripts/detect-stack.sh .
+# bash — read-only stack detection, once per app-root. appRoots default ["."]
+# runs the detector exactly once against the repo root (today's behavior, unchanged).
+for root in "${appRoots[@]}"; do        # e.g. (".") or ("siteroot/web" "siteroot/api")
+  ./scripts/detect-stack.sh "$root"     # the detector's [REPO_DIR] positional
+done
 ```
 
 ```powershell
-# PowerShell 7+ — the cross-platform twin (identical findings).
-./scripts/detect-stack.ps1 .
+# PowerShell 7+ — the cross-platform twin (identical findings, -RepoDir positional).
+foreach ($root in $appRoots) {          # e.g. @('.') or @('siteroot/web','siteroot/api')
+  ./scripts/detect-stack.ps1 $root
+}
 ```
 
-The detector emits TSV: a header then one finding per stack — columns `stack  signal  convention  manifestPin  domainSkills  flag`. Consume each finding as the **seed** for the interview's stack-derived defaults and for the plan's recorded entries:
+**Union the per-root findings into one detection set.** The detector reports per-root; `plan` merges (unions) the findings across app-roots into the single scaffolded `.project/` docs + `nonNegotiables` — a mixed-stack monorepo (e.g. a Node `siteroot/web` + a .NET `siteroot/api`) carries **both** stacks' conventions / manifest pins / `domainSkills` candidates, deduped (`SPEC.md` §4.1 `appRoots`, §5). The union is the recorded stack capture; `domainSkills` is the deduped union of every root's mapped skills. A `flag = human` from **any** root (no signal, ambiguous primary, unresolved framework) carries into the plan as a `[TBD]` 🔴 for that root — flagged unknowns are never guessed. For the **default `["."]`** the loop runs exactly once against the repo root and the union is that single finding set — **byte-identical to today's single-detector run**.
+
+The detector emits TSV per run: a header then one finding per stack — columns `stack  signal  convention  manifestPin  domainSkills  flag`. Consume each finding (across the union) as the **seed** for the interview's stack-derived defaults and for the plan's recorded entries:
 
 - `convention` → seeds the best-practice convention note (→ `conventions.md` anchors).
 - `manifestPin` → seeds the framework + version pin (→ `library-manifest.md#Runtime & frameworks`).
@@ -105,6 +121,7 @@ Determine whether this is a **fresh** repo (bootstrap from empty) or an **existi
 | `<projectDocs>/` docs present? (per-doc, per-anchor — a `[TBD]` anchor counts as **not present**) | Which §A doc entries are "would populate" vs "already present (no change)". |
 | `.milestone-config/driver.json` / `feeder.json` keys present? (read at Step 0) | Which §B config keys are "would add" vs "already present (no change)" vs "would change" (value differs). |
 | Existing branches / labels / branch protection / CI workflow — read **only where the Step 0 precondition allows** a read-only `gh` / `git` query | Which §B suite-readiness entries are "would create" vs "already present". When the precondition blocks the read, record the entry's reconcile state as unknown-pending-precondition and flag it 🔴 rather than guessing it absent. |
+| App layout — already resolved/confirmed in Step 2 (the layout inspection that discovers where `package.json` / `*.csproj` / `pyproject.toml` / `src/` live runs **ahead of** the per-root detector). | Re-states the `appRoots` resolved in Step 2 as part of the read-only reconcile — it confirms, it does **not** re-discover. Repo-root signals → `["."]` (single-root, the default); signals nested under `siteroot/web`, `siteroot/api`, etc. → those paths. The resolved `appRoots` already drove the per-root detection (Step 2) and drives the baked globs (Step 4). |
 
 Map each entry's current-vs-planned state onto the `SPEC.md` §4.4 **reconcile class**:
 
@@ -119,11 +136,27 @@ Compose Step 1's interview answers + Step 2's detected signals into the plan's t
 
 **Section A — project-docs population (Job 1, the core)** — one entry per standing doc (`SPEC.md` §5). Key each captured answer by its `##` anchor (the fixed map at `docs/understanding-interview.md` §2 — do not re-derive it). Each entry carries the four §4.2 per-entry fields: **Target** (the doc path), **Captured value** (the real, cited understanding — never a scaffolded placeholder), **Reconcile class** (default `human-owned` for project docs — propose, never overwrite — except a first `apply` onto an empty/placeholder doc), **State** (`captured` / `none` / `[TBD]` 🔴). A doc whose understanding the interview could not resolve carries `[TBD]` 🔴; a doc that does not apply (e.g. `design-system.md` for a backend-only repo) carries `none` (`SPEC.md` §5).
 
+**Bake the app-roots into the emitted globs (root-absolute, at scaffold time).** Before recording `sourceGlobs` / `uiSurfaceGlobs`, **prefix each app-root onto that root's globs** so every persisted glob is **root-absolute** (`SPEC.md` §4.1 `appRoots`, §6.1). For each `appRoots` entry `R` and each base glob `G` that root contributes, derive the emitted glob in this **fixed order — normalize, then no-op test, then join**:
+
+1. **Normalize `R` first.** Strip any single trailing slash (`siteroot/web/` → `siteroot/web`).
+2. **No-op test on the normalized `R`.** Treat `"."`, `"./"`, and `""` (empty) as the **same no-op sentinel** — after step 1 they all normalize to `"."` or `""`. A no-op sentinel emits `G` **unchanged** (never `./G`, never a leading or doubled separator).
+3. **Join only a real nested root.** Any `R` that is **not** the no-op sentinel (e.g. `siteroot/web`) emits `R/G` — a single `/` separator between the normalized root and the base glob.
+
+The persisted glob set is the **union** of every app-root's emitted globs:
+
+| `appRoots` | base glob | emitted (recorded) glob |
+|---|---|---|
+| `["."]` / `["./"]` / `[""]` (default / single-root) | `skills/**` | `skills/**`  ← **no-op sentinel; NEVER `./skills/**` or `//skills/**`** |
+| `["siteroot/web"]` (or `["siteroot/web/"]`) | `src/**` | `siteroot/web/src/**`  ← **single separator** |
+| `["siteroot/web", "siteroot/api"]` | `src/**` (web), `**/*.cs` (api) | `siteroot/web/src/**`, `siteroot/api/**/*.cs` (union) |
+
+Because normalization runs **before** the no-op test, every spelling of "the repo root" (`"."`, `"./"`, `""`) collapses to the same no-op sentinel and emits the base glob unchanged — there is no trailing-slash form that escapes the no-op into a `./skills/**` join. The baking happens **here, where `plan` assembles the glob values** — the persisted globs are ordinary strings; the config writers (`scripts/write-{driver,feeder}-config.*`) take them verbatim and **re-derive nothing** (their headers: opaque persisters), so they need **no `appRoots` key**. `uiSurfaceGlobs` is baked the same way (or stays `none` for a non-UI repo). Because the no-op sentinel emits the base glob unchanged, a **default / single-root** plan records the **exact globs it would have without any `appRoots` field** — the no-regression guarantee (`SPEC.md` §4.1).
+
 **Section B — suite-readiness (Job 2, supporting)** — record **only non-default keys / create-if-missing entries** (`SPEC.md` §6 — minimal, consumer-driven; a key at its default is omitted):
 
 | Sub-section | Entries recorded | Source |
 |---|---|---|
-| Configs (`driver.json` / `feeder.json` non-default keys) | `integrationBranch` / `protectedBranch` (branch model), `sourceGlobs`, `uiSurfaceGlobs` (or `none`), `unitTestCmd` / `preflightCmd` (detected), `e2eEnv` (or `none`), **`domainSkills`** (from the §2 detection candidate / §A best-practice capture), **`versioning`** (from Tier 6), `feeder.json#projectDocs` / `reviewer` when non-default. Configs are machine-owned → reconcile class `add` (key absent) or `patch` (value changed), never `human-owned` (`SPEC.md` §6.1). | Steps 1–2 |
+| Configs (`driver.json` / `feeder.json` non-default keys) | `integrationBranch` / `protectedBranch` (branch model), `sourceGlobs`, `uiSurfaceGlobs` (or `none`) — **recorded root-absolute, app-root-prefixed per the baking rule above**, `unitTestCmd` / `preflightCmd` (detected), `e2eEnv` (or `none`), **`domainSkills`** (the deduped **union** across app-roots, from the §2 per-root detection / §A best-practice capture), **`versioning`** (from Tier 6), `feeder.json#projectDocs` / `reviewer` when non-default. Configs are machine-owned → reconcile class `add` (key absent) or `patch` (value changed), never `human-owned` (`SPEC.md` §6.1). **No `appRoots` key is written** — it is a plan-file-only field (`SPEC.md` §4.1, §6.1). | Steps 1–2 × `appRoots` |
 | Version-file / bump target | One entry for *where* the version lives. `captured` (`.claude-plugin/plugin.json`) for a plugin repo; `none` for a `versioning: none` project; **`[TBD]` 🔴 when the repo is non-plugin and no version file resolved** — the recorded brief caveat (the driver's bump target is `.claude-plugin/plugin.json` today; a non-plugin version file may need it generalized — [BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2), carried explicitly rather than silently dropped. | Tier 6 |
 | Label taxonomy | One create-if-missing entry per label — the driver's (`needs design`, `needs decision`, `blocked`, `needs review`, `judgment call`, `in progress`) and the feeder's (`ui`, `logic`, `risk:light`, `risk:heavy`). Identified by name; reconcile class `add` (`SPEC.md` §6.3). | fixed taxonomy |
 | Branch model | One entry per branch (integration, protected) to create-if-missing + the default-branch policy. By name; `add`; never delete (`SPEC.md` §6.3). | branch model |
@@ -155,6 +188,7 @@ Write the file in the **`SPEC.md` §8 shape** — the fields (§4) are the contr
 - Source brief: <inline | file:<path>>          # the bootstrapper's brief is the project's own intent — no `epic #<n>` form
 - Status: READY                                  # READY | FLAGGED (🔴 TBDs / precondition blocks remain)
 - Project-docs path: <projectDocs, e.g. .project/>
+- App-roots: ["."]                               # ["."] = repo root is the app root (default). Nested: ["siteroot/web","siteroot/api"] — globs below are baked root-absolute from these
 
 ## A. Project docs
 | Doc | State | Reconcile | Captured understanding |
@@ -173,7 +207,7 @@ Write the file in the **`SPEC.md` §8 shape** — the fields (§4) are the contr
 | driver.json#integrationBranch | captured | add   | <branch>            # recorded only when non-default
 | driver.json#domainSkills      | captured | add   | <from detection / best-practice capture>
 | driver.json#versioning        | captured | patch | <semver | false>
-| driver.json#sourceGlobs       | captured | patch | <globs>
+| driver.json#sourceGlobs       | captured | patch | <root-absolute globs>   # baked from appRoots; ["."] no-op → e.g. ["skills/**"]; nested → ["siteroot/web/**","siteroot/api/**"]
 | feeder.json#projectDocs       | captured | add   | <path>              # only when non-default
 
 ### Version-file / bump target
@@ -224,4 +258,5 @@ Be concise — report status and outcomes flatly, no wall-of-text. Present the p
 - **Adopt-or-init is a read-only diff** — a fresh repo plans full provisioning (all create/populate); an existing repo plans only the delta (`no-op` / `add` / `patch` / `human-owned`). `plan` reads existing state to compute this and still writes nothing.
 - **The `gh` precondition is surfaced, never silent** — on failure `plan` emits a clear message and marks the remote-dependent entries (branch protection, CI registration) 🔴 blocked-on-precondition; it MAY still emit the plan, but MUST NOT claim those steps will succeed ([BRIEF.md:82](../../BRIEF.md)).
 - **Deterministic slug; re-run overwrites, never diverges** — the same goal resolves to the same `.milestone-bootstrapper/plan-<slug>.md` path; re-running overwrites it with equivalent content (`SPEC.md` §2.2).
+- **`appRoots` shapes detection and bakes the globs — it is never a config key.** Default `["."]` is byte-unchanged (single-root; the `"."` prefix is a no-op, never `./`). For nested apps, `plan` detects **once per app-root** and unions the signals into one `.project/` + `nonNegotiables`, and prefixes each app-root into that root's `sourceGlobs` / `uiSurfaceGlobs` so the persisted globs are root-absolute strings the writers take verbatim. `appRoots` lives **only** in the plan file — never written into `driver.json` / `feeder.json`, never persisted under `.project/`; configs + `.project/` stay at the project root (`SPEC.md` §4.1, §6.1).
 - **Authors no code, opens no PRs, never touches branches.** Reads code and repo state to ground decisions; never edits a source file, creates a branch, or opens a PR.

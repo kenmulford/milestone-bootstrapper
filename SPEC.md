@@ -144,6 +144,7 @@ sections (§5, §6) whose **per-entry** fields are defined here in §4.2.
 | **Source-brief reference** | `inline` \| `file:<path>` | Matches the plan back to its originating brief (§3) — the brief↔plan match and any report routing. (No `epic #<n>` form: the bootstrapper's brief is the project's own intent, not a GitHub epic.) |
 | **Plan-level verdict / status line** | enum | `READY` (all sections resolved or recorded "none") \| `FLAGGED` (one or more 🔴 `[TBD]` fields remain — §4.3). A consumer surfaces this; `apply` may proceed but must re-surface every 🔴 entry for the human first. |
 | **Target project-docs path** | string | Where the project docs are written — the consumer's `projectDocs` location (default `.project/`). Resolved once at plan time so `apply` / `update` write to the same place. |
+| **App-roots** (`appRoots`) | array of repo-relative path strings | The repo-relative directories the project's apps live under (e.g. `["siteroot/web", "siteroot/api"]`), for repos whose apps are **nested** while configs + `.project/` stay at the project root. **Default `["."]`** — the repo root *is* the app root (today's single-root behavior). Resolved once at plan time so `apply` / `update` agree. Two load-bearing consumptions: (a) `plan` runs the stack detector **once per app-root** and **unions** the detected signals into the single scaffolded `.project/` docs + `nonNegotiables` (§5; mixed-stack monorepos); (b) `plan` **bakes each app-root as a prefix into that root's emitted `sourceGlobs` / `uiSurfaceGlobs` at scaffold time** (§6.1), so the persisted globs are ordinary **root-absolute** strings (`siteroot/web/**`) the driver/feeder match from the repo root — **no consumed-schema change** (below). A `"."` app-root prefix is a **NO-OP**: `["."]` + `skills/**` → `skills/**` (never `./skills/**`), so a default/single-root plan is **byte-identical** to one with no `appRoots` field at all. |
 
 ### 4.2 Per-change-entry fields
 
@@ -253,8 +254,8 @@ changed), never `human-owned`.
 |---|---|---|
 | `driver.json#integrationBranch` | The integration branch name. | branch model (§6.3) |
 | `driver.json#protectedBranch` | The protected branch name. | branch model (§6.3) |
-| `driver.json#sourceGlobs` | The code paths the driver's hooks guard. | repo layout |
-| `driver.json#uiSurfaceGlobs` | UI surface paths (UI projects only; else `none`). | repo layout / stack capture |
+| `driver.json#sourceGlobs` | The code paths the driver's hooks guard. **Recorded root-absolute** — each glob already carries its app-root prefix (§4.1 `appRoots`), so a nested-app repo emits `siteroot/web/**`, a single-root repo emits `skills/**` (the `"."` prefix is a no-op). | repo layout × `appRoots` (§4.1) |
+| `driver.json#uiSurfaceGlobs` | UI surface paths (UI projects only; else `none`). **Recorded root-absolute** — same app-root prefixing as `sourceGlobs`. | repo layout / stack capture × `appRoots` (§4.1) |
 | `driver.json#unitTestCmd` / `preflightCmd` | Detected test / preflight commands. | stack detection |
 | `driver.json#e2eEnv` | E2E environment keys (or `none`). | environment capture |
 | `driver.json#domainSkills` | Stack-specific skills wired from the best-practice capture (§5) — so the implementer cites idioms ([BRIEF.md:35,47](BRIEF.md)). | stack capture |
@@ -265,6 +266,14 @@ changed), never `human-owned`.
 Defaults are **omitted** (a key at its default is not written — the configs stay
 minimal). An entry is recorded only when the captured value diverges from the consumer
 tool's default.
+
+> **`appRoots` adds NO consumed-config key.** The app-root prefixing (§4.1) is baked
+> into the `sourceGlobs` / `uiSurfaceGlobs` **values** at scaffold time, so the persisted
+> globs are ordinary root-absolute strings the driver/feeder already match from the repo
+> root. There is **no `appRoots` key in `driver.json` / `feeder.json`** — it lives only
+> in the plan-file contract (§4.1). The consumers (`milestone-driver`,
+> `milestone-feeder`) need no change and parse no new key; this is a bootstrapper-only
+> feature.
 
 ### 6.2 Version-file / bump-target — flagged when non-plugin
 
@@ -324,6 +333,7 @@ this Markdown layout is one faithful rendering of them.
 - Source brief: file:BRIEF.md
 - Status: READY            # READY | FLAGGED (🔴 TBDs remain)
 - Project-docs path: .project/
+- App-roots: ["."]         # ["."] = repo root is the app root (default, single-root). Nested: ["siteroot/web","siteroot/api"]
 
 ## A. Project docs
 | Doc | State | Reconcile | Captured understanding |
@@ -341,7 +351,7 @@ this Markdown layout is one faithful rendering of them.
 |-----|-------|-----------|-------|
 | driver.json#domainSkills | captured | add   | ["<stack-skill>"] |
 | driver.json#versioning   | captured | patch | semver |
-| driver.json#sourceGlobs  | captured | patch | ["src/**", "tests/**"] |
+| driver.json#sourceGlobs  | captured | patch | ["src/**", "tests/**"] |   # root-absolute; ["."] no-op. Nested: ["siteroot/web/**","siteroot/api/**"] |
 
 ### Version-file / bump target
 | Target | State | Reconcile | Value |
@@ -389,3 +399,10 @@ this Markdown layout is one faithful rendering of them.
   `[TBD] 🔴` when the repo is non-plugin and no version file resolves, making the
   recorded brief caveat representable ([BRIEF.md:38](BRIEF.md)).
 - **Minimal, consumer-driven configs** — only non-default keys are recorded.
+- **`appRoots` is a plan-file-only field for nested-app layouts** — default `["."]`
+  (single-root, byte-unchanged). `plan` detects per app-root and unions the signals
+  into one `.project/`, and bakes each app-root as a prefix into that root's
+  `sourceGlobs` / `uiSurfaceGlobs` so the persisted globs are root-absolute. The
+  `"."` prefix is a no-op. It adds **no** key to `driver.json` / `feeder.json` and
+  **no** machine artifact under `.project/`; configs + `.project/` stay at the project
+  root. Bootstrapper-only — the consumers need no change (§4.1, §6.1).
