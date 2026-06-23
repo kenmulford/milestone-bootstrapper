@@ -27,6 +27,8 @@ Say this to the user before doing any work — pick the line that matches the re
 
 **Resolve the project-docs path.** Read `.milestone-config/feeder.json#projectDocs` when present, else default `.project/` (`SPEC.md` §4.1). The refreshed plan file also records this once as its `Project-docs path` field (Step 2); the two MUST agree — use the plan file's recorded value as authoritative (resolved at plan time so `apply` / `update` write to the same place, `SPEC.md` §4.1). This same path is the project-docs side of the bootstrapped-repo check (Step 1).
 
+**`appRoots` comes from the refreshed plan file — `update` re-derives nothing from it.** The refreshed plan's `App-roots` field (`SPEC.md` §4.1, default `["."]`) already shaped its §A union and baked its §B globs at plan time (`plan` did the per-root detection and prefixing when it refreshed the file). `update` **reads** `appRoots` from that plan file (AC2) but does **not** re-detect per root, re-bake any glob, or write an `appRoots` key — the §B `sourceGlobs` / `uiSurfaceGlobs` it reconciles are already **root-absolute** strings, reconciled verbatim through the union write (Step 4 (2)). `.project/` and `.milestone-config/` stay at the **project root** regardless of `appRoots`. If a refreshed plan changes `appRoots` (apps moved / a root was added), that surfaces as ordinary **glob drift** in the §B Configs diff — `update` shows the live→plan glob diff and patches it like any other config change; there is no separate `appRoots` reconcile path because there is no `appRoots` key to reconcile.
+
 **Check the `gh` precondition up front — surface it, never let it fail silently** (`BRIEF.md:82`). The remote reconcile (labels, branches, CI registration, protection) needs `gh` authenticated, and **branch protection needs repo-admin scope**. Probe `gh` auth read-only:
 
 ```bash
@@ -95,6 +97,7 @@ The refreshed plan file is the **load-bearing build artifact** — `update` read
 | **Slug** (`SPEC.md` §4.1) | The plan's identity — Step 2 resolved the file by it. |
 | **Status** (`READY` \| `FLAGGED`, `SPEC.md` §4.1, §4.3) | A consumer surfaces this; `update` may proceed but **re-surfaces every 🔴 `[TBD]` entry to the human first**. |
 | **Project-docs path** (`SPEC.md` §4.1) | Where §A docs live (Step 0 — the two MUST agree). |
+| **App-roots** (`appRoots`, `SPEC.md` §4.1) | Read from the refreshed plan (AC2) — context only. It already shaped the §A union and baked the §B globs at plan time; `update` re-derives nothing, writes no `appRoots` key, and reconciles the already-root-absolute §B globs verbatim. A changed `appRoots` surfaces as ordinary §B glob drift (Step 0). |
 | **§A. Project docs** — one row per doc: Doc · State · Reconcile · Captured understanding (`SPEC.md` §4.2, §5) | The doc entries — reconciled at Step 4 (1). Project docs default to reconcile class **`human-owned`** → propose, never overwrite. |
 | **§B. Configs** — `driver.json#…` / `feeder.json#…` non-default keys: Key · State · Reconcile · Value (`SPEC.md` §4.2, §6.1) | The tool-owned config values — reconciled at Step 4 (2). Reconcile class `add` (key absent) / `patch` (value changed) — never `human-owned`. |
 | **§B. Labels** — one row per label: Label · State · Reconcile (`SPEC.md` §6.3) | The label taxonomy — reconciled at Step 4 (3). `add` create-if-missing. |
