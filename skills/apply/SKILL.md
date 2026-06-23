@@ -27,6 +27,8 @@ Say this to the user before doing any work — pick the line that matches the re
 
 **Resolve the project-docs path.** Read `.milestone-config/feeder.json#projectDocs` when present, else default `.project/` (`SPEC.md` §4.1). The plan file also records this once as its `Project-docs path` field (Step 1); the two MUST agree. Use the plan file's recorded value as authoritative — it was resolved at plan time so `apply` writes to the same place (`SPEC.md` §4.1: "Resolved once at plan time so `apply` / `update` write to the same place").
 
+**`appRoots` is already consumed — there is nothing to re-derive.** The plan file's `App-roots` field (`SPEC.md` §4.1, default `["."]`) was the **input** to `plan`'s per-root detection and glob-baking; by the time `apply` reads the plan, that work is **done** — the §A docs are the unioned capture and the §B `sourceGlobs` / `uiSurfaceGlobs` are already **root-absolute** strings. `apply` therefore does **not** re-run the detector per root, does **not** re-bake any glob, and does **not** write an `appRoots` key anywhere (it is plan-file-only — `SPEC.md` §6.1). `apply` reads the recorded root-absolute globs and passes them **verbatim** to the opaque config writers (Step 3 (2)). `.project/` and `.milestone-config/` are written at the **project root** regardless of `appRoots` (`SPEC.md` §4.1) — the resolved project-docs path above is unaffected by app-root nesting.
+
 **Check the `gh` precondition up front — surface it, never let it fail silently** ([BRIEF.md:82](../../BRIEF.md)). The consequential tail (branches, CI registration, branch protection) needs `gh` authenticated, and **branch protection needs repo-admin scope**. Probe `gh` auth read-only:
 
 ```bash
@@ -72,6 +74,7 @@ The plan file is the **load-bearing build artifact** — `apply` reads it and de
 | **Slug** (`SPEC.md` §4.1) | The plan's identity — Step 1 resolved the file by it. |
 | **Status** (`READY` \| `FLAGGED`, `SPEC.md` §4.1, §4.3) | A consumer surfaces this; `apply` may proceed but **re-surfaces every 🔴 `[TBD]` entry to the human first** (`SPEC.md` §4.1). |
 | **Project-docs path** (`SPEC.md` §4.1) | Where §A docs are written (Step 0 — the two MUST agree). |
+| **App-roots** (`appRoots`, `SPEC.md` §4.1) | Context only — it already shaped the §A union and baked the §B globs at plan time. `apply` **re-derives nothing from it**: it does not re-detect per root, does not re-bake globs, and writes no `appRoots` key. The §B `sourceGlobs` / `uiSurfaceGlobs` it reads are already root-absolute (Step 0). |
 | **§A. Project docs** — one row per doc: Doc · State · Reconcile · Captured understanding (`SPEC.md` §4.2, §5) | The doc-population entries — deployed at step (1). Each carries all four §4.2 per-entry fields. |
 | **§B. Configs** — `driver.json#…` / `feeder.json#…` non-default keys: Key · State · Reconcile · Value (`SPEC.md` §4.2, §6.1) | The config values — deployed at step (2). |
 | **§B. Labels** — one row per label: Label · State · Reconcile (`SPEC.md` §6.3) | The label taxonomy — deployed at step (3). |
@@ -145,7 +148,7 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 ```
 
 - **`--project-docs` / `-ProjectDocs`** → pass the SAME Step-0-resolved project-docs value to BOTH writers, so `feeder.json#projectDocs` and `driver.json#projectDocs` cannot diverge. `apply` passes the resolved value uniformly; the writer itself omits the key when it equals the default `.project/` (omit-when-default lives in the writer, not in `apply`).
-- **`domainSkills` empty / `none`** → omit `--domain-skills`; the key is absent (not written as `[]`) — a recorded "none", never a fabricated skill (issue AC-3; `scripts/write-driver-config.sh` absent-means-default).
+- **`sourceGlobs` / `uiSurfaceGlobs` are passed VERBATIM** → the §B values are already **root-absolute** (the app-root prefix was baked at plan time — `SPEC.md` §4.1, §6.1; the `"."` prefix was a no-op, so a single-root plan's globs are unprefixed). `apply` hands them to `--source-globs` / `--ui-surface-globs` exactly as recorded — it does **not** re-prefix, re-derive, or know the app-roots. The writers persist them opaquely (their headers: re-derive nothing), which is why **no `appRoots` key is ever written** to `driver.json`.
 - **`versioning`** → `--versioning false` only when the plan recorded `versioning: false`; omit otherwise (absent-means-versioned).
 - Both writers are idempotent: a re-run whose assembled object is byte-identical to the existing file leaves it untouched (true no-op; `scripts/write-feeder-config.sh` Behavior).
 - **Why configs come before the branch/CI/protection tail:** `provision-branches`, `emit-ci-workflow`, and `provision-protection` all **read the branch names from `.milestone-config/driver.json`** (their headers: "Branch names are SOURCED, never chosen"; "CONSUMES the values #8 already resolved"). If the config step has not landed, those steps hit a precondition failure. The safe order places configs at step (2) so the tail's prerequisite exists.
