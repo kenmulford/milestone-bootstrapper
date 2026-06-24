@@ -2,6 +2,25 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.2.1 — dogfood the suite on its own repo
+
+**Theme:** Practice what the suite preaches — give this repo its own populated `.project/` brain docs, and align its hand-authored config with what the scaffolder actually emits.
+
+### 🛠️ Maintenance
+
+| Issue | PR | What |
+|---|---|---|
+| #58 Bootstrap this repo's own `.project/` (dogfood) | #59 | Populated `.project/` (design-philosophy, library-manifest, environment, conventions; design-system/tokens recorded `none` for this no-UI repo) with this repo's real, cited understanding, captured via the bootstrapper's own `write-project-docs` against the templates. The feeder, driver, and coherence-reviewer now ground on house docs instead of thin inferred grounding. |
+| #54 Drop the stray `versioning` key from this repo's own `.milestone-config/feeder.json` | this PR | `feeder.json` is now `{}` — the exact output `scripts/write-feeder-config.sh` emits for this repo (both `projectDocs` and `reviewer` at their bundled defaults). `versioning` is a driver-owned key (`scripts/write-feeder-config.sh` excludes it from the feeder slice and routes it to `driver.json`), where it stays correctly declared. Removes the misleading reference shape. |
+
+### Consumer notes (upgrading from v0.2.0)
+
+- **No behavior change for consumers.** Both changes are to this repo's own dogfood artifacts (`.project/`, `.milestone-config/feeder.json`) — no script, skill, schema, or plan-file contract changed.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none.
+
 ## v0.2.0 — nested-app scaffolding
 
 **Theme:** Scaffold repos whose apps live nested under a subdirectory (e.g. `siteroot/web`, `siteroot/api`), not just at the repo root — while configs and `.project/` stay at the project root.
