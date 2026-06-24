@@ -38,3 +38,8 @@ __pycache__/
 # NOTE: does not match .milestone-config/ (the committed feeder/driver profiles).
 # Un-anchored so it matches at any depth (e.g. under tests/scenarios/<n>/).
 .milestone-feeder/
+
+# milestone-bootstrapper plan preview plan-scratch (per-run, e.g.
+# .milestone-bootstrapper/plan-<slug>.md) — reviewed then deployed, never committed.
+# NOTE: does not match .milestone-config/ (the committed feeder/driver profiles).
+.milestone-bootstrapper/
