@@ -1,6 +1,6 @@
 # milestone-bootstrapper
 
-The milestone-bootstrapper creates and stores all of the important parts of a project beyond the code. Conventions, style guides, production architecture, and framework decisions are captured here so the [`milestone-feeder`](https://github.com/kenmulford/milestone-feeder) and [`milestone-driver`](https://github.com/kenmulford/milestone-driver) operate with that knowledge. The goal of this plugin is to reduce drift during longer code sessions by reinforcing *how* you architect your project.
+The milestone-bootstrapper creates and stores all of the important parts of a project beyond the code. Conventions, style guides, production architecture, and framework decisions are captured here so the [`milestone-feeder`](https://github.com/kenmulford/milestone-feeder), [`milestone-driver`](https://github.com/kenmulford/milestone-driver), and [`milestone-coherence-reviewer`](https://github.com/kenmulford/milestone-coherence-reviewer) operate with that knowledge. The goal of this plugin is to reduce drift during longer code sessions by reinforcing *how* you architect your project.
 
 It keeps all of that in two folders in your repo. The docs live under `.project/`, a file each. The `driver.json` and `feeder.json` that `milestone-driver` and `milestone-feeder` read live under `.milestone-config/`.
 
@@ -10,7 +10,7 @@ It's a Claude Code plugin with three commands. `plan` interviews you and preview
 
 **Install it** — either way pulls in the required `superpowers` plugin. Restart Claude Code afterward so the plugins load.
 
-Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all three suite plugins (`milestone-bootstrapper`, `milestone-feeder`, `milestone-driver`). Add one marketplace and install any of them:
+Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all four suite plugins (`milestone-bootstrapper`, `milestone-feeder`, `milestone-driver`, `milestone-coherence-reviewer`). Add one marketplace and install any of them:
 
 ```
 /plugin marketplace add kenmulford/milestone-suite
@@ -69,11 +69,11 @@ A few things need to be in place for `apply` and `update` to do their work. Each
 
 ## Config
 
-There's nothing to configure to start — the first `plan` run writes a small profile, and every setting has a default. The settings live in `.milestone-config/`, the same folder `milestone-driver` and `milestone-feeder` read. What `apply` writes there — your branch model, source paths, UI paths, the stack-specific skills the driver should cite, your versioning policy — is what those two consume, so you set it once and the suite runs on it.
+There's nothing to configure to start — the first `plan` run writes a small profile, and every setting has a default. The settings live in `.milestone-config/`, the same folder `milestone-driver` and `milestone-feeder` read. What `apply` writes there — your branch model, source paths, UI paths, the stack-specific skills the driver should cite, your versioning policy — is what those three consume, so you set it once and the suite runs on it.
 
 ## Status
 
-**v1 — built.** `plan`, `apply`, and `update` all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. Part of a dev-tools suite with `milestone-feeder` and `milestone-driver`.
+**v1 — built.** `plan`, `apply`, and `update` all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. Part of a dev-tools suite with `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
 
 ## Docs
 
