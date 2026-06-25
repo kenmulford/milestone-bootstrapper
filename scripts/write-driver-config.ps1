@@ -49,6 +49,16 @@
 #   EVERY OTHER key against schema parity; do NOT "un-widen" projectDocs back to
 #   schema parity — that would re-introduce the drift this key exists to prevent.
 #
+#   GUARDRAIL EXEMPTION — stack / stackVersionFile: `stack` and `stackVersionFile`
+#   are INTENTIONALLY-emitted additive keys that ship AHEAD of the sibling driver
+#   schema (milestone-driver/docs/profile-schema.md) and its emitter/CI consumer.
+#   This is a recorded, deliberate widening — not drift: this issue (bootstrapper
+#   #63) defines the enum + writer + SPEC only; the lockstep canonical-schema bump
+#   in milestone-driver/docs/profile-schema.md is tracked separately by issue #66,
+#   and the descriptive->enum mapping (e.g. angular collapses to node) is issue #65.
+#   The guardrail above still governs EVERY OTHER key against schema parity; do NOT
+#   "un-widen" these keys back to schema parity before #66 lands.
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   -Repo <dir>               target repo root (default: current directory)
@@ -70,10 +80,19 @@
 #                               `true` (or omitted) => OMIT the key;
 #                               `false` => write `versioning: false` (the ONLY
 #                               value ever written for this key).
+#     -Stack <enum>             the runtime family the emitter will scaffold setup
+#                               for, one of node|python|dotnet|maui|rust|plugin|none.
+#                               absent-means-default: `none` (or omitted) => OMIT
+#                               the key; any other member => write it. An unknown
+#                               value is a bad input (exit 1).
+#     -StackVersionFile <str>   the detected version-file path (e.g. ".nvmrc",
+#                               ".python-version", "global.json"). OMITTED when not
+#                               passed — never written as null/empty.
 #   Env fallbacks (params win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
 #     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
-#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING.
+#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING, DRIVER_STACK,
+#     DRIVER_STACK_VERSION_FILE.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -109,7 +128,9 @@ param(
     [string]$E2eEnv,
     # Versioning accepts the strings "true"/"false" (or the boolean $true/$false);
     # typed as object so `-Versioning:$false` and `-Versioning false` both work.
-    [object]$Versioning
+    [object]$Versioning,
+    [string]$Stack,
+    [string]$StackVersionFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -155,6 +176,19 @@ $unitTestCmdIn    = if ($bound.ContainsKey('UnitTestCmd'))    { @{ Supplied = $t
 $preflightCmdIn   = if ($bound.ContainsKey('PreflightCmd'))   { @{ Supplied = $true; Value = $PreflightCmd } }   elseif ($null -ne $env:DRIVER_PREFLIGHT_CMD   -and $env:DRIVER_PREFLIGHT_CMD   -ne '') { @{ Supplied = $true; Value = $env:DRIVER_PREFLIGHT_CMD } }   else { @{ Supplied = $false } }
 $e2eEnvIn         = if ($bound.ContainsKey('E2eEnv'))         { @{ Supplied = $true; Value = $E2eEnv } }         elseif ($null -ne $env:DRIVER_E2E_ENV         -and $env:DRIVER_E2E_ENV         -ne '') { @{ Supplied = $true; Value = $env:DRIVER_E2E_ENV } }         else { @{ Supplied = $false } }
 $versioningIn     = if ($bound.ContainsKey('Versioning'))     { @{ Supplied = $true; Value = $Versioning } }     elseif ($null -ne $env:DRIVER_VERSIONING     -and $env:DRIVER_VERSIONING     -ne '') { @{ Supplied = $true; Value = $env:DRIVER_VERSIONING } }     else { @{ Supplied = $false } }
+# stack: param wins, else env, else empty (omit-when-`none`/empty). An explicitly
+# passed empty `-Stack ''` is a BAD INPUT (errors below) — mirroring the bash twin,
+# where `--stack ''` is rejected by the `${2:?--stack needs a value}` parse guard.
+# An empty ENV (`DRIVER_STACK=''`) is treated as unset — bash `${DRIVER_STACK:-}`
+# does the same — so it omits without error. Track the explicit-empty-arg case so
+# only that path errors, matching bash's arg-empty(error) / env-empty(omit) split.
+$stackArgEmpty = $bound.ContainsKey('Stack') -and [string]::IsNullOrEmpty($Stack)
+if (-not $bound.ContainsKey('Stack')) {
+    $Stack = if ($env:DRIVER_STACK) { $env:DRIVER_STACK } else { '' }
+}
+# stackVersionFile tracks supplied-ness like the other optional string keys, so an
+# unset value is OMITTED (distinct from a passed empty value, which is a bad input).
+$stackVersionFileIn = if ($bound.ContainsKey('StackVersionFile')) { @{ Supplied = $true; Value = $StackVersionFile } } elseif ($null -ne $env:DRIVER_STACK_VERSION_FILE -and $env:DRIVER_STACK_VERSION_FILE -ne '') { @{ Supplied = $true; Value = $env:DRIVER_STACK_VERSION_FILE } } else { @{ Supplied = $false } }
 
 # --- Validate the three Core keys (all-or-refuse; no partial profile) ----------
 # Schema:91-95,134-142 — the three Core keys are required in the file.
@@ -236,6 +270,31 @@ if ($versioningIn.Supplied) {
     }
 }
 
+# --- Validate stack (omit-when-default; `none`/unset => OMIT, else write) -------
+# The enum is node|python|dotnet|maui|rust|plugin|none. `none` (and a genuinely
+# unset value: no `-Stack` arg + empty/unset DRIVER_STACK) means "omit the key", so
+# it is VALID input. An explicitly passed empty `-Stack ''` is a BAD INPUT, not
+# `none` — it errors + exit 1 (parity with the bash twin's `${2:?}` arg-empty
+# rejection and the -Versioning empty->error path above). Any non-member value is
+# likewise rejected with a clear message naming the allowed set + exit 1. The
+# descriptive->enum mapping (e.g. angular collapses to node) is issue #65's job —
+# this writer only validates the resolved enum.
+$writeStack = $false
+if ($stackArgEmpty) {
+    [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|none (got: ).")
+    exit 1
+}
+if (-not [string]::IsNullOrEmpty($Stack)) {
+    switch ($Stack) {
+        { $_ -in 'node', 'python', 'dotnet', 'maui', 'rust', 'plugin' } { $writeStack = $true }
+        'none' { $writeStack = $false }  # default => omit
+        default {
+            [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|none (got: $Stack).")
+            exit 1
+        }
+    }
+}
+
 # --- Assemble the object in canonical key order (Core first, then optional) -----
 # An ordered hashtable preserves key order in the serialized JSON. Add only keys
 # the plan supplied. implementerAgent is intentionally never added.
@@ -254,6 +313,12 @@ if ($unitTestCmdIn.Supplied)    { $obj['unitTestCmd'] = $unitTestCmdIn.Value }
 if ($preflightCmdIn.Supplied)   { $obj['preflightCmd'] = $preflightCmdIn.Value }
 if ($domainSkillsIn.Supplied)   { $obj['domainSkills'] = $domainSkillsVal }
 if ($e2eEnvIn.Supplied)         { $obj['e2eEnv'] = $e2eEnvVal }
+# stack / stackVersionFile: additive keys shipping ahead of the canonical schema
+# (see GUARDRAIL EXEMPTION above). stack written only for a non-`none` enum member;
+# stackVersionFile written only when passed (supplied-ness tracked). Same slot as
+# the .sh twin so output stays byte-identical.
+if ($writeStack)                  { $obj['stack'] = $Stack }
+if ($stackVersionFileIn.Supplied) { $obj['stackVersionFile'] = $stackVersionFileIn.Value }
 
 try {
     $NewContent = ($obj | ConvertTo-Json -Depth 10 -Compress:$false)
