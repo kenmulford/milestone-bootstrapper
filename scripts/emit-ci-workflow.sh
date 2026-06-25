@@ -136,6 +136,14 @@ INTEGRATION_BRANCH="$(printf '%s' "$DRIVER_JSON" | jq -r '.integrationBranch // 
 UNIT_TEST_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.unitTestCmd       // "" | if type=="string" then . else "" end')"
 PREFLIGHT_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.preflightCmd      // "" | if type=="string" then . else "" end')"
 
+# stack / stackVersionFile (#63's output) — CONSUMED, never re-detected (the
+# consume-not-detect contract above). `stack` is the runtime family the emitter
+# scaffolds a per-job setup STEP for; `stackVersionFile` is the optional version-
+# file path that pins the toolchain. Both absent on a pre-#63 (or stack-less)
+# driver.json — that yields NO setup step and the byte-identical two-job frame.
+STACK="$(printf '%s' "$DRIVER_JSON"              | jq -r '.stack            // "" | if type=="string" then . else "" end')"
+STACK_VERSION_FILE="$(printf '%s' "$DRIVER_JSON" | jq -r '.stackVersionFile // "" | if type=="string" then . else "" end')"
+
 # --- Resolve the trigger branch (flag-don't-guess when absent) -----------------
 # An absent integrationBranch is flagged and rendered as a [TBD] branch filter —
 # the file stays valid YAML and never gates against a guessed branch.
@@ -167,6 +175,120 @@ else
   FLAGS+=("🔴 preflightCmd is absent from ${DRIVER_FILE} — the '${PREFLIGHT_CONTEXT}' job runs a [TBD] placeholder that fails until a command is recorded. No command was fabricated.")
 fi
 
+# Emit a string as a YAML single-quoted scalar body (a single-quote inside a
+# single-quoted scalar is escaped by doubling it). Defined here because the setup-
+# step block below quotes the version-file path; reused for the branch/run scalars.
+yaml_squote() { printf "%s" "$1" | sed "s/'/''/g"; }
+
+# --- Resolve the per-stack runtime setup STEP (fail-OPEN, never [TBD]->exit 1) --
+# This block makes a freshly-bootstrapped repo's PR #1 GREEN: each of the two jobs
+# gets a runtime installed BEFORE its gate runs, so `npm test` / `pytest` / `dotnet
+# test` resolve instead of red-CI'ing on a missing toolchain. The setup is a STEP
+# prepended inside BOTH existing jobs (after checkout, before the gate) — never a
+# new or renamed job, so the unit-tests/preflight required-status-check contexts
+# stay byte-stable (#12/#13's contract).
+#
+# Fail-OPEN by design (.project/design-philosophy.md#Error & failure philosophy):
+# a correctly-detected stack missing only an OPTIONAL detail (no stackVersionFile,
+# no committed lockfile) gets a sane default + a `::warning::` annotation — NEVER
+# the `[TBD]`->`exit 1` pattern above, which is reserved for a genuinely-absent
+# TEST command. A warning keeps CI green on PR #1; an absent stack key yields NO
+# step at all (back-compat: byte-identical to the prior two-job frame).
+#
+# SETUP_STEPS is either empty (no step) or one-or-more fully-indented YAML lines,
+# EACH terminated by a newline, slotted between the checkout step and the gate
+# step in both jobs. Action majors pinned against the live action releases (Jun
+# 2026): setup-node@v6, setup-python@v6, setup-dotnet@v5.
+SETUP_STEPS=""
+case "$STACK" in
+  node)
+    # Lockfile presence is an observable fact about the TARGET repo (not a stack
+    # re-detection): `npm ci` requires a committed package-lock.json; without one
+    # we fall back to `npm install` + a ::warning:: (still GREEN), per criterion 2.
+    if [ -n "$STACK_VERSION_FILE" ]; then
+      NODE_VERSION_INPUT="          node-version-file: '$(yaml_squote "$STACK_VERSION_FILE")'"
+    else
+      NODE_VERSION_INPUT="          node-version: 'lts/*'"
+    fi
+    if [ -f "${REPO%/}/package-lock.json" ]; then
+      SETUP_STEPS="$(cat <<EOF
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+${NODE_VERSION_INPUT}
+      - name: Install dependencies (clean, from lockfile)
+        run: npm ci
+EOF
+)"
+    else
+      SETUP_STEPS="$(cat <<EOF
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+${NODE_VERSION_INPUT}
+      - name: Install dependencies (no lockfile committed)
+        run: |
+          echo "::warning::milestone-bootstrapper: no package-lock.json committed — using 'npm install' (non-reproducible). Commit a lockfile for deterministic CI."
+          npm install
+EOF
+)"
+    fi
+    ;;
+  python)
+    if [ -n "$STACK_VERSION_FILE" ]; then
+      PYTHON_VERSION_INPUT="          python-version-file: '$(yaml_squote "$STACK_VERSION_FILE")'"
+    else
+      PYTHON_VERSION_INPUT="          python-version: '3.x'"
+    fi
+    SETUP_STEPS="$(cat <<EOF
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+${PYTHON_VERSION_INPUT}
+EOF
+)"
+    ;;
+  dotnet|maui)
+    # global-json-file pins the SDK when present; absent => the runner's latest
+    # installed SDK (a sane default, never an error). maui shares the dotnet setup.
+    if [ -n "$STACK_VERSION_FILE" ]; then
+      SETUP_STEPS="$(cat <<EOF
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: '$(yaml_squote "$STACK_VERSION_FILE")'
+EOF
+)"
+    else
+      SETUP_STEPS="$(cat <<EOF
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+EOF
+)"
+    fi
+    ;;
+  rust)
+    # No setup step: the Rust toolchain (rustc + cargo) is pre-installed on the
+    # ubuntu-latest runner, so a setup-rust step would be redundant.
+    SETUP_STEPS="      # Rust toolchain (rustc + cargo) is pre-installed on ubuntu-latest — no setup step needed."
+    ;;
+  plugin|none|*)
+    # plugin / none / absent (incl. pre-#63 driver.json): NO setup step. An absent
+    # stack key yields the byte-identical two-job frame the prior version emitted.
+    SETUP_STEPS=""
+    ;;
+esac
+
+# Render SETUP_STEPS as a heredoc-ready prefix: when non-empty, ensure it ends in
+# exactly one newline so it slots cleanly ABOVE the gate step line; when empty it
+# contributes nothing (no blank line). Built once, reused in both jobs.
+if [ -n "$SETUP_STEPS" ]; then
+  SETUP_BLOCK="${SETUP_STEPS}
+"
+else
+  SETUP_BLOCK=""
+fi
+
 # --- Assemble the workflow YAML (mirrors the sibling structure exactly) --------
 # Single-quoted heredoc body for the static frame; the four resolved values
 # (branch filter + two run lines, both single-line by construction) are
@@ -175,9 +297,7 @@ fi
 # The run lines are emitted as YAML single-quoted scalars so an arbitrary command
 # (which may contain ${{ }}, ':', '#', or other YAML-significant characters) is
 # always a valid, unambiguous scalar. Per YAML, a single-quote inside a
-# single-quoted scalar is escaped by doubling it.
-yaml_squote() { printf "%s" "$1" | sed "s/'/''/g"; }
-
+# single-quoted scalar is escaped by doubling it (see yaml_squote, defined above).
 BRANCH_FILTER_Q="$(yaml_squote "$BRANCH_FILTER")"
 UNIT_RUN_Q="$(yaml_squote "$UNIT_RUN")"
 PREFLIGHT_RUN_Q="$(yaml_squote "$PREFLIGHT_RUN")"
@@ -217,7 +337,7 @@ jobs:
     steps:
       - name: Check out the code under review
         uses: actions/checkout@v7
-      - name: Run the unit-test gate
+${SETUP_BLOCK}      - name: Run the unit-test gate
         run: '${UNIT_RUN_Q}'
 
   ${PREFLIGHT_CONTEXT}:
@@ -226,7 +346,7 @@ jobs:
     steps:
       - name: Check out the code under review
         uses: actions/checkout@v7
-      - name: Run the preflight gate
+${SETUP_BLOCK}      - name: Run the preflight gate
         run: '${PREFLIGHT_RUN_Q}'
 EOF
 )"
