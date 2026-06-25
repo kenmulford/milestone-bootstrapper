@@ -49,15 +49,18 @@
 #   EVERY OTHER key against schema parity; do NOT "un-widen" projectDocs back to
 #   schema parity — that would re-introduce the drift this key exists to prevent.
 #
-#   GUARDRAIL EXEMPTION — stack / stackVersionFile: `stack` and `stackVersionFile`
-#   are INTENTIONALLY-emitted additive keys that ship AHEAD of the sibling driver
-#   schema (milestone-driver/docs/profile-schema.md) and its emitter/CI consumer.
-#   This is a recorded, deliberate widening — not drift: this issue (bootstrapper
-#   #63) defines the enum + writer + SPEC only; the lockstep canonical-schema bump
-#   in milestone-driver/docs/profile-schema.md is tracked separately by issue #66,
-#   and the descriptive->enum mapping (e.g. angular collapses to node) is issue #65.
-#   The guardrail above still governs EVERY OTHER key against schema parity; do NOT
-#   "un-widen" these keys back to schema parity before #66 lands.
+#   GUARDRAIL EXEMPTION — stack / stackVersionFile (PERMANENT, by design): `stack`
+#   and `stackVersionFile` are INTENTIONALLY-emitted additive keys that are
+#   PERMANENTLY exempt from the sibling driver schema (milestone-driver/docs/
+#   profile-schema.md) — NOT a temporary ship-ahead. The milestone-driver plugin
+#   never consumes these keys; only THIS bootstrapper's emit-ci-workflow reads them
+#   back. A schema documents what its plugin consumes, so these bootstrapper-owned
+#   keys are canonically documented in this repo's SPEC §6.1 and deliberately kept
+#   OUT of the driver's schema (profile-schema.md carries a one-line pointer to
+#   SPEC §6.1 for file-completeness, with no per-key lockstep). The guardrail still
+#   governs EVERY OTHER key against schema parity; do NOT "un-widen" these keys back
+#   to schema parity — that would re-introduce the drift this exemption prevents.
+#   Resolves #66 (schema convergence — decided: permanent exemption, not converge).
 #
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
