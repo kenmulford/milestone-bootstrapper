@@ -22,9 +22,15 @@
 #
 # Usage:   detect-stack.sh [REPO_DIR]   (default: $PWD)
 # Output:  TSV on stdout — header then one finding per line. Columns:
-#            stack  signal  convention  manifestPin  domainSkills  flag
+#            stack  signal  convention  manifestPin  domainSkills  flag  versionFile
 #          domainSkills is a JSON array literal (e.g. ["maui-skills:*"]) or empty.
 #          flag is the literal string "human" for rows needing a human, else "".
+#          versionFile is the repo-relative version-file PATH actually found for
+#          this stack (node -> .nvmrc else .node-version; python -> .python-version;
+#          .NET / MAUI -> global.json), or EMPTY when no such file exists or the
+#          stack has no version-file concept. Never a resolved concrete version —
+#          setup-* actions read the version from the file on the runner. Never a
+#          fabricated path (flag-don't-guess): empty when the file is absent.
 # Requires: jq preferred for package.json parsing. When jq is absent, the Node
 #          block falls back to a grep-based Angular check (parity with the pwsh
 #          twin's built-in JSON parse) — jq-absent is NOT treated as malformed
@@ -47,11 +53,13 @@ command -v jq >/dev/null 2>&1 || have_jq=0
 findings=()
 app_stacks=()             # distinct application stacks, for primary-ambiguity check
 
-# emit_finding STACK SIGNAL CONVENTION MANIFEST DOMAINSKILLS FLAG
+# emit_finding STACK SIGNAL CONVENTION MANIFEST DOMAINSKILLS FLAG [VERSIONFILE]
 emit_finding() {
-  # Tabs separate columns; guard against embedded tabs/newlines in inputs.
-  local stack="$1" signal="$2" conv="$3" pin="$4" skills="$5" flag="$6"
-  findings+=("$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$stack" "$signal" "$conv" "$pin" "$skills" "$flag")")
+  # Tabs separate columns; guard against embedded tabs/newlines in inputs. The 7th
+  # column (versionFile) is APPENDED after flag; it defaults to empty so the six
+  # existing call sites that pass only six args keep their established output.
+  local stack="$1" signal="$2" conv="$3" pin="$4" skills="$5" flag="$6" verfile="${7:-}"
+  findings+=("$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$stack" "$signal" "$conv" "$pin" "$skills" "$flag" "$verfile")")
 }
 
 # first existing match of a glob under repo (NUL-safe-ish; globs are simple here)
@@ -61,11 +69,22 @@ first_match() {
   return 1
 }
 
+# version_file CANDIDATE...: print the first candidate that exists as a regular
+# file under repo (the version-file PATH actually present), else print nothing.
+# Reuses the same presence test (`-f`) the per-stack signal blocks already use —
+# flag-don't-guess: an absent file yields an EMPTY column, never a fabricated path.
+version_file() {
+  local c
+  for c in "$@"; do [ -f "$repo/$c" ] && { printf '%s' "$c"; return 0; }; done
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # Python — pyproject.toml
 # ---------------------------------------------------------------------------
 if [ -f "$repo/pyproject.toml" ]; then
   app_stacks+=("python")
+  py_verfile="$(version_file '.python-version')" || py_verfile=""
   # Framework hint from a dependency line (best-effort, grep — toml has no jq).
   fw=""
   if grep -qiE '(^|[^a-z])fastapi([^a-z]|$)' "$repo/pyproject.toml" 2>/dev/null; then fw="FastAPI"
@@ -82,12 +101,12 @@ if [ -f "$repo/pyproject.toml" ]; then
     # Genuine unknown — framework signal present but unresolved. [TBD] + flag for
     # the human. Per the omit rows, Python still maps to NO domainSkills (never
     # fabricated). flag=human marks the unresolved field, not the version pin.
-    emit_finding "Python" "pyproject.toml" "$conv" "Python $TBD; framework $TBD" "" "human"
+    emit_finding "Python" "pyproject.toml" "$conv" "Python $TBD; framework $TBD" "" "human" "$py_verfile"
   else
     # Framework resolved -> omit domainSkills (Python omit row). The version pin
     # stays [TBD] for the interview to confirm; that is an expected state, not a
     # genuine unknown, so it is NOT flagged (parity with Node/.NET pins).
-    emit_finding "Python ($fw)" "pyproject.toml" "$conv" "Python $TBD; $fw $TBD (pin version)" "" ""
+    emit_finding "Python ($fw)" "pyproject.toml" "$conv" "Python $TBD; $fw $TBD (pin version)" "" "" "$py_verfile"
   fi
 fi
 
@@ -102,7 +121,7 @@ emit_node_angular() {
   emit_finding "Angular (Node)" "package.json" \
     "Angular: standalone components, typed reactive forms, OnPush change detection, feature-module/route layout" \
     "Node $TBD; Angular $TBD (pin @angular/core version)" \
-    '["angular-skills:angular-developer"]' ""
+    '["angular-skills:angular-developer"]' "" "$node_verfile"
 }
 emit_node_generic() {
   app_stacks+=("node")
@@ -110,10 +129,14 @@ emit_node_generic() {
   emit_finding "Node (generic)" "package.json" \
     "Node: ESM modules, package scripts as task entrypoints, lockfile committed" \
     "Node $TBD (pin engines.node / runtime)" \
-    "" ""
+    "" "" "$node_verfile"
 }
 
 if [ -f "$repo/package.json" ]; then
+  # Node version-file PATH: .nvmrc takes precedence over .node-version (the order
+  # the candidates are passed). Empty when neither exists. Same presence fact
+  # whether or not package.json parses, so it is computed once for all node rows.
+  node_verfile="$(version_file '.nvmrc' '.node-version')" || node_verfile=""
   if [ "$have_jq" = "1" ]; then
     if jq -e . "$repo/package.json" >/dev/null 2>&1; then
       # Valid JSON, jq present: precise dependency-key Angular discrimination.
@@ -129,7 +152,7 @@ if [ -f "$repo/package.json" ]; then
       app_stacks+=("node")
       emit_finding "Node ($TBD)" "package.json" \
         "$FLAG package.json present but failed to parse — fix JSON, then re-detect" \
-        "$TBD" "" "human"
+        "$TBD" "" "human" "$node_verfile"
     fi
   else
     # jq absent: do NOT claim the JSON is malformed (the file may be fine). Fall
@@ -151,6 +174,9 @@ fi
 dotnet_file=""
 dotnet_file="$(first_match '*.csproj')" || dotnet_file="$(first_match '*.sln')" || dotnet_file=""
 if [ -n "$dotnet_file" ]; then
+  # .NET version-file PATH: global.json (pins the SDK band) for both MAUI and
+  # non-MAUI. Empty when absent.
+  dotnet_verfile="$(version_file 'global.json')" || dotnet_verfile=""
   # MAUI if any csproj declares the maui workload / UseMaui, or references Maui.
   is_maui=0
   # Scan every csproj in the tree (root and nested) for a MAUI marker. find is
@@ -167,14 +193,14 @@ if [ -n "$dotnet_file" ]; then
     emit_finding ".NET MAUI" "$(basename "$dotnet_file")" \
       "MAUI: MVVM, XAML resource dictionaries, handlers over renderers, current-API adherence (no obsolete APIs)" \
       ".NET $TBD; MAUI $TBD (pin TFM + workload)" \
-      '["maui-skills:*","maui-current-apis"]' ""
+      '["maui-skills:*","maui-current-apis"]' "" "$dotnet_verfile"
   else
     app_stacks+=("dotnet")
     # Non-MAUI .NET -> omit (no bundled domain skill). NOT [TBD] — a known omit.
     emit_finding ".NET (non-MAUI)" "$(basename "$dotnet_file")" \
       ".NET: DI via host builder, async/await, options pattern, layered project structure" \
       ".NET $TBD (pin TargetFramework)" \
-      "" ""
+      "" "" "$dotnet_verfile"
   fi
 fi
 
@@ -217,26 +243,29 @@ for s in "${app_stacks[@]:-}"; do
   [ "$dup" = "0" ] && uniq_stacks+=("$s")
 done
 
-# Header (always emitted).
-printf 'stack\tsignal\tconvention\tmanifestPin\tdomainSkills\tflag\n'
+# Header (always emitted). The 7th column (versionFile) is appended after flag.
+printf 'stack\tsignal\tconvention\tmanifestPin\tdomainSkills\tflag\tversionFile\n'
 
 if [ "${#findings[@]}" -eq 0 ]; then
   # None state: no recognizable stack signal at all. "none" is a valid value,
-  # but the absence of ANY stack is something a human should confirm.
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  # but the absence of ANY stack is something a human should confirm. No stack
+  # means no version-file concept -> empty 7th column.
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "none" "(no stack signal)" \
     "$FLAG no recognizable stack signal found — confirm this is intentional or supply the stack" \
-    "none" "" "human"
+    "none" "" "human" ""
   exit 0
 fi
 
-# Ambiguous primary: more than one distinct application stack present.
+# Ambiguous primary: more than one distinct application stack present. The primary
+# is unresolved, so no single version-file is asserted -> empty 7th column (the
+# per-stack rows below still carry their own version-file paths).
 if [ "${#uniq_stacks[@]}" -gt 1 ]; then
   joined="$(printf '%s,' "${uniq_stacks[@]}")"; joined="${joined%,}"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "(multi-stack)" "$joined" \
     "$FLAG multiple application stacks detected — confirm the primary stack for the project" \
-    "n/a" "" "human"
+    "n/a" "" "human" ""
 fi
 
 for line in "${findings[@]}"; do printf '%s\n' "$line"; done
