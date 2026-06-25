@@ -49,6 +49,16 @@
 #   EVERY OTHER key against schema parity; do NOT "un-widen" projectDocs back to
 #   schema parity — that would re-introduce the drift this key exists to prevent.
 #
+#   GUARDRAIL EXEMPTION — stack / stackVersionFile: `stack` and `stackVersionFile`
+#   are INTENTIONALLY-emitted additive keys that ship AHEAD of the sibling driver
+#   schema (milestone-driver/docs/profile-schema.md) and its emitter/CI consumer.
+#   This is a recorded, deliberate widening — not drift: this issue (bootstrapper
+#   #63) defines the enum + writer + SPEC only; the lockstep canonical-schema bump
+#   in milestone-driver/docs/profile-schema.md is tracked separately by issue #66,
+#   and the descriptive->enum mapping (e.g. angular collapses to node) is issue #65.
+#   The guardrail above still governs EVERY OTHER key against schema parity; do NOT
+#   "un-widen" these keys back to schema parity before #66 lands.
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   --repo <dir>              target repo root (default: current directory)
@@ -70,10 +80,19 @@
 #                                 `true` (or omitted) => OMIT the key;
 #                                 `false` => write `versioning: false` (the ONLY
 #                                 value ever written for this key).
+#     --stack <enum>              the runtime family the emitter will scaffold setup
+#                                 for, one of node|python|dotnet|maui|rust|plugin|none.
+#                                 absent-means-default: `none` (or omitted) => OMIT
+#                                 the key; any other member => write it. An unknown
+#                                 value is a bad input (exit 1).
+#     --stack-version-file <str> the detected version-file path (e.g. ".nvmrc",
+#                                 ".python-version", "global.json"). OMITTED when not
+#                                 passed — never written as null/empty.
 #   Env fallbacks (args win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
 #     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
-#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING.
+#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING, DRIVER_STACK,
+#     DRIVER_STACK_VERSION_FILE.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -117,6 +136,9 @@ UNIT_TEST_CMD="${DRIVER_UNIT_TEST_CMD:-}"
 PREFLIGHT_CMD="${DRIVER_PREFLIGHT_CMD:-}"
 E2E_ENV="${DRIVER_E2E_ENV:-}"
 VERSIONING="${DRIVER_VERSIONING:-}"
+# stack resolves to empty when unset (omit-when-`none`; empty is treated as `none`).
+STACK="${DRIVER_STACK:-}"
+STACK_VERSION_FILE="${DRIVER_STACK_VERSION_FILE:-}"
 
 # Sentinels so an explicitly-passed empty string is distinguishable from "unset".
 # Optional string keys use this to tell "--unit-test-cmd ''" (invalid) apart from
@@ -128,6 +150,7 @@ UNSET=$'\x00UNSET\x00'
 [ -n "${DRIVER_UI_SURFACE_GLOBS+x}" ] || UI_SURFACE_GLOBS="$UNSET"
 [ -n "${DRIVER_E2E_ENV+x}" ]        || E2E_ENV="$UNSET"
 [ -n "${DRIVER_VERSIONING+x}" ]     || VERSIONING="$UNSET"
+[ -n "${DRIVER_STACK_VERSION_FILE+x}" ] || STACK_VERSION_FILE="$UNSET"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -142,6 +165,8 @@ while [ "$#" -gt 0 ]; do
     --preflight-cmd)      PREFLIGHT_CMD="${2?--preflight-cmd needs a value}"; shift 2 ;;
     --e2e-env)            E2E_ENV="${2:?--e2e-env needs a value}"; shift 2 ;;
     --versioning)         VERSIONING="${2:?--versioning needs a value}"; shift 2 ;;
+    --stack)              STACK="${2:?--stack needs a value}"; shift 2 ;;
+    --stack-version-file) STACK_VERSION_FILE="${2?--stack-version-file needs a value}"; shift 2 ;;
     -h|--help)
       grep -E '^# ' "$0" | sed -E 's/^# ?//'
       exit 0 ;;
@@ -200,6 +225,23 @@ if [ "$VERSIONING" != "$UNSET" ]; then
   esac
 fi
 
+# --- Validate stack (omit-when-default; `none`/empty => OMIT, else write) -------
+# The enum is node|python|dotnet|maui|rust|plugin|none. `none` (and an unset/empty
+# value) means "omit the key", so it is VALID input. Any other value is rejected
+# with a clear message naming the allowed set + exit 1 (mirrors the --versioning
+# reject-unknown shape above). The descriptive->enum mapping (e.g. angular collapses
+# to node) is issue #65's job — this writer only validates the resolved enum.
+WRITE_STACK=0
+if [ -n "$STACK" ]; then
+  case "$STACK" in
+    node|python|dotnet|maui|rust|plugin) WRITE_STACK=1 ;;
+    none) WRITE_STACK=0 ;;  # default => omit
+    *)
+      echo "ERROR: --stack must be one of node|python|dotnet|maui|rust|plugin|none (got: $STACK)." >&2
+      exit 1 ;;
+  esac
+fi
+
 # --- Assemble the object in canonical key order (Core first, then optional) -----
 # Build the jq filter incrementally, adding only keys the plan supplied. Core
 # keys are always present. implementerAgent is intentionally never added.
@@ -246,6 +288,18 @@ if [ "$E2E_ENV" != "$UNSET" ]; then
   # makes a single canonical order the only possible output regardless of version.
   filter="${filter} | .e2eEnv = (\$e2eEnv | to_entries | sort_by(.key) | from_entries)"
   args+=(--argjson e2eEnv "$E2E_ENV")
+fi
+# stack / stackVersionFile: additive keys shipping ahead of the canonical schema
+# (see GUARDRAIL EXEMPTION above). stack written only for a non-`none` enum member;
+# stackVersionFile written only when passed (not the UNSET sentinel). Same slot in
+# the .ps1 twin so output stays byte-identical.
+if [ "$WRITE_STACK" -eq 1 ]; then
+  filter="${filter} | .stack = \$stack"
+  args+=(--arg stack "$STACK")
+fi
+if [ "$STACK_VERSION_FILE" != "$UNSET" ]; then
+  filter="${filter} | .stackVersionFile = \$stackVersionFile"
+  args+=(--arg stackVersionFile "$STACK_VERSION_FILE")
 fi
 
 if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1)"; then
