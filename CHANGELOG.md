@@ -2,6 +2,35 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.3.0 — runnable CI for detected stacks
+
+**Theme:** A freshly-bootstrapped repo's emitted `ci.yml` is now runnable — the bootstrapper detects the project's stack, persists it, and scaffolds the matching per-job runtime setup, so the first PR's CI goes green instead of failing on a missing toolchain.
+
+### ✨ Runnable CI scaffolding
+
+| Issue | PR | What |
+|---|---|---|
+| #63 Add `stack` / `stackVersionFile` to the `driver.json` writer + SPEC §6.1 | #67 | `write-driver-config` (both twins) gained `stack` (enum `node \| python \| dotnet \| maui \| rust \| plugin \| none`) and the optional `stackVersionFile` (the detected version-file path) — env fallbacks, enum validation (mirroring the `--versioning` reject shape), and omit-when-default discipline; documented in `SPEC.md §6.1`. Foundation only — no emitter behavior. |
+| #64 Scaffold a per-stack runtime setup step in the emitted CI workflow | #68 | `emit-ci-workflow` (both twins) now consumes `stack`/`stackVersionFile` and prepends a runtime setup STEP inside the existing `unit-tests`/`preflight` jobs — node → `setup-node@v6` + `npm ci`/`npm install`, python → `setup-python@v6`, dotnet/maui → `setup-dotnet@v5`, rust/plugin/none → none. Setup is **fail-open** (a missing optional detail → sane default + `::warning::`, never a failed job), uses no new jobs (the required-status-check contexts stay byte-stable), and never auto-scaffolds Playwright/E2E. An absent `stack` key emits the prior two-job frame byte-for-byte. |
+| #65 Populate `stack`/`stackVersionFile` from real detection, end-to-end | #69 | `detect-stack` (both twins) gained an additive 7th TSV column carrying the detected version-file PATH (node `.nvmrc`/`.node-version`, python `.python-version`, dotnet/maui `global.json`; empty otherwise — never a resolved version). `plan` maps the descriptive stack to the enum and records both keys in the §B Configs plan-file row; `apply`/`update` pass `--stack`/`--stack-version-file` through to the writer, mirroring the `domainSkills`/`versioning` pipeline. |
+
+### 🛠️ Maintenance
+
+| Issue | PR | What |
+|---|---|---|
+| #66 Resolve the driver-schema question for `stack`/`stackVersionFile` | this PR | Decided: **permanent exemption**, not cross-repo convergence. The milestone-driver plugin never reads these keys (only this bootstrapper's CI emitter does), and a schema documents what *its* plugin consumes — so `stack`/`stackVersionFile` are canonically defined in this repo's `SPEC.md §6.1` and deliberately kept out of the driver's `profile-schema.md`. The writer's exemption comment is relabeled permanent; a one-line pointer in `milestone-driver/docs/profile-schema.md` (companion change in that repo) keeps `driver.json` fully documented with no per-key lockstep. |
+
+### Consumer notes (upgrading from v0.2.1)
+
+- **New capability — runnable CI for detected stacks.** When the bootstrapper detects a Node / Python / .NET / MAUI / Rust stack, the emitted `ci.yml` now installs the matching runtime before your test/preflight gates run, so a freshly-bootstrapped repo's first PR gets green CI instead of red-CI'ing on a missing toolchain.
+- **Fully backward-compatible.** A `driver.json` with no `stack` key — any pre-v0.3.0 bootstrap, or a stack the detector doesn't recognize — emits the prior two-job frame byte-for-byte. Existing repos pick up the richer workflow on their next `plan` → `apply`/`update`.
+- **No Playwright / E2E in CI by default** — heavy, expensive browser jobs are never auto-scaffolded; E2E stays opt-in and consumer-owned.
+- **New `driver.json` keys `stack` / `stackVersionFile` are additive and bootstrapper-owned** — the milestone-driver plugin neither reads nor validates them, so **no driver or feeder change is needed** to consume a v0.3.0 config. Their canonical definition is in this repo's `SPEC.md §6.1` (#66).
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none.
+
 ## v0.2.1 — dogfood the suite on its own repo
 
 **Theme:** Practice what the suite preaches — give this repo its own populated `.project/` brain docs, and align its hand-authored config with what the scaffolder actually emits.

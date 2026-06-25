@@ -179,17 +179,19 @@ The writers stay idempotent under this discipline: when the assembled union equa
   --integration-branch "<integration>" --protected-branch "<protected>" \
   --source-globs '<json string[]>' \
   [--domain-skills '<json string[]>'] [--versioning false] [--ui-surface-globs '<json>'] \
+  [--stack '<enum>'] [--stack-version-file '<path>'] \
   [--unit-test-cmd "<cmd>"] [--preflight-cmd "<cmd>"] [--e2e-env '<json>']
 ```
 
 ```powershell
 # PowerShell 7+ — behaviorally-equivalent twins (PascalCase -Flag params). Same UNION rule.
 ./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Reviewer "<val>"]
-./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
+./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 
 - **`domainSkills` empty / `none`** → omit `--domain-skills` / `-DomainSkills` **only when no live `domainSkills` exists**; the key stays absent (never written as `[]`) — a recorded "none", never a fabricated skill (`SPEC.md` §4.3). If `domainSkills` **is** live and the plan merely doesn't change it, pass the **live value** back (the union rule) so it survives the rewrite.
 - **`versioning`** → pass `--versioning false` / `-Versioning false` when the plan records `versioning: false` **or** the live config already has `versioning: false` and the plan doesn't change it (union); omit only when neither carries it.
+- **`stack` / `stackVersionFile`** → same UNION rule as `domainSkills`. Pass `--stack` / `-Stack` and `--stack-version-file` / `-StackVersionFile` with the **plan value** when the plan changes them, else the **live value** carried back so the whole-file rewrite preserves them; omit a key **only when neither the plan nor the live config carries it** (an absent key stays absent — never written as empty; the version-file is a PATH, never a resolved version). A live-only `stack`/`stackVersionFile` the plan no longer carries is the live-only case — flagged 🔴 for the human AND passed through in the union write so the rewrite preserves it.
 - **The union write is what makes these writers non-destructive.** Because each writer rebuilds the whole file from the keys passed, `update` must pass every live key back in — a key the plan no longer carries is the **live-only** case (Step 5): it is **flagged 🔴 for the human AND passed through in the union write** so the rewrite preserves it. It is **never stripped** — the writer drops it only if `update` fails to pass it, which `update` never does.
 
 #### Step 4 (3) — Labels (§B) — ADD missing (reuses #6)

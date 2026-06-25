@@ -1,6 +1,6 @@
 {
   "name": "milestone-bootstrapper",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Populates a repository's .project/ \"brain\" docs from canonical templates and makes the repo suite-ready, so milestone-feeder and milestone-driver have grounded house docs and conventions to plan and build against.",
   "author": {
     "name": "Ken Mulford",

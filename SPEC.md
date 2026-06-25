@@ -260,6 +260,8 @@ changed), never `human-owned`.
 | `driver.json#e2eEnv` | E2E environment keys (or `none`). | environment capture |
 | `driver.json#domainSkills` | Stack-specific skills wired from the best-practice capture (§5) — so the implementer cites idioms ([BRIEF.md:35,47](BRIEF.md)). | stack capture |
 | `driver.json#versioning` | The versioning policy (`semver` \| `false`/none) from the interview ([BRIEF.md:38,47](BRIEF.md)). | versioning policy |
+| `driver.json#stack` | The runtime family the emitter scaffolds setup for — one of `node` \| `python` \| `dotnet` \| `maui` \| `rust` \| `plugin` \| `none`. Omitted when `none` (no scaffold). | stack detection |
+| `driver.json#stackVersionFile` | The detected version-file path (e.g. `.nvmrc`, `.python-version`, `global.json`), when one resolved. | stack detection |
 | `feeder.json#projectDocs` | The project-docs location, when non-default. | §4.1 target path |
 | `feeder.json#reviewer` | The self-check reviewer, when non-default. | suite wiring |
 

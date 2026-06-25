@@ -16,9 +16,15 @@
 #
 # Usage:   detect-stack.ps1 [-RepoDir <path>]   (default: current directory)
 # Output:  TSV on stdout — header then one finding per line. Columns:
-#            stack  signal  convention  manifestPin  domainSkills  flag
+#            stack  signal  convention  manifestPin  domainSkills  flag  versionFile
 #          domainSkills is a JSON array literal (e.g. ["maui-skills:*"]) or empty.
 #          flag is the literal "human" for rows needing a human, else "".
+#          versionFile is the repo-relative version-file PATH actually found for
+#          this stack (node -> .nvmrc else .node-version; python -> .python-version;
+#          .NET / MAUI -> global.json), or EMPTY when no such file exists or the
+#          stack has no version-file concept. Never a resolved concrete version —
+#          setup-* actions read the version from the file on the runner. Never a
+#          fabricated path (flag-don't-guess): empty when the file is absent.
 # Read-only, side-effect-free.
 
 [CmdletBinding()]
@@ -54,11 +60,26 @@ $appStacks = [System.Collections.Generic.List[string]]::new()
 
 function Add-Finding {
     param([string]$Stack, [string]$Signal, [string]$Convention,
-          [string]$ManifestPin, [string]$DomainSkills, [string]$Flag)
-    $findings.Add(($Stack, $Signal, $Convention, $ManifestPin, $DomainSkills, $Flag) -join $TAB)
+          [string]$ManifestPin, [string]$DomainSkills, [string]$Flag,
+          [string]$VersionFile = '')
+    # The 7th column (versionFile) is APPENDED after flag; it defaults to '' so the
+    # call sites that pass only six args keep their established output.
+    $findings.Add(($Stack, $Signal, $Convention, $ManifestPin, $DomainSkills, $Flag, $VersionFile) -join $TAB)
 }
 
 function Join-Path2 { param([string]$a, [string]$b) "$a/$b" }
+
+# First candidate that exists as a regular file under repo (the version-file PATH
+# actually present), else ''. Mirrors the .sh version_file helper: reuses the same
+# presence test (Test-Path -PathType Leaf) the per-stack signal blocks already use
+# — flag-don't-guess: an absent file yields an EMPTY column, never a fabricated path.
+function Get-VersionFile {
+    param([string[]]$Candidates)
+    foreach ($c in $Candidates) {
+        if (Test-Path -LiteralPath (Join-Path2 $repo $c) -PathType Leaf) { return $c }
+    }
+    return ''
+}
 
 # ---------------------------------------------------------------------------
 # Python — pyproject.toml
@@ -66,6 +87,7 @@ function Join-Path2 { param([string]$a, [string]$b) "$a/$b" }
 $pyproject = Join-Path2 $repo 'pyproject.toml'
 if (Test-Path -LiteralPath $pyproject -PathType Leaf) {
     $appStacks.Add('python')
+    $pyVerFile = Get-VersionFile @('.python-version')
     $toml = ''
     try { $toml = Get-Content -LiteralPath $pyproject -Raw -ErrorAction Stop } catch { $toml = '' }
     $fw = ''
@@ -81,11 +103,11 @@ if (Test-Path -LiteralPath $pyproject -PathType Leaf) {
     if ($fw -eq $TBD) {
         # Genuine unknown — framework present but unresolved. [TBD] + flag. Python
         # still maps to NO domainSkills (omit row); never fabricated.
-        Add-Finding 'Python' 'pyproject.toml' $conv "Python $TBD; framework $TBD" '' 'human'
+        Add-Finding 'Python' 'pyproject.toml' $conv "Python $TBD; framework $TBD" '' 'human' $pyVerFile
     } else {
         # Framework resolved -> omit domainSkills. The version pin stays [TBD] for
         # the interview; that is expected, not a genuine unknown -> NOT flagged.
-        Add-Finding "Python ($fw)" 'pyproject.toml' $conv "Python $TBD; $fw $TBD (pin version)" '' ''
+        Add-Finding "Python ($fw)" 'pyproject.toml' $conv "Python $TBD; $fw $TBD (pin version)" '' '' $pyVerFile
     }
 }
 
@@ -94,6 +116,10 @@ if (Test-Path -LiteralPath $pyproject -PathType Leaf) {
 # ---------------------------------------------------------------------------
 $pkg = Join-Path2 $repo 'package.json'
 if (Test-Path -LiteralPath $pkg -PathType Leaf) {
+    # Node version-file PATH: .nvmrc takes precedence over .node-version (the order
+    # the candidates are passed). Empty when neither exists. Same presence fact
+    # whether or not package.json parses, so it is computed once for all node rows.
+    $nodeVerFile = Get-VersionFile @('.nvmrc', '.node-version')
     $pkgJson = $null
     try { $pkgJson = Get-Content -LiteralPath $pkg -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
     catch { $pkgJson = $null }
@@ -107,21 +133,21 @@ if (Test-Path -LiteralPath $pkg -PathType Leaf) {
             Add-Finding 'Angular (Node)' 'package.json' `
                 'Angular: standalone components, typed reactive forms, OnPush change detection, feature-module/route layout' `
                 "Node $TBD; Angular $TBD (pin @angular/core version)" `
-                '["angular-skills:angular-developer"]' ''
+                '["angular-skills:angular-developer"]' '' $nodeVerFile
         } else {
             $appStacks.Add('node')
             # Generic Node -> omit (no mapped skill). NOT fabricated, NOT [TBD].
             Add-Finding 'Node (generic)' 'package.json' `
                 'Node: ESM modules, package scripts as task entrypoints, lockfile committed' `
                 "Node $TBD (pin engines.node / runtime)" `
-                '' ''
+                '' '' $nodeVerFile
         }
     } else {
         # Malformed/unreadable package.json: report + flag, CONTINUE the pass.
         $appStacks.Add('node')
         Add-Finding "Node ($TBD)" 'package.json' `
             "$FLAG package.json present but failed to parse — fix JSON, then re-detect" `
-            $TBD '' 'human'
+            $TBD '' 'human' $nodeVerFile
     }
 }
 
@@ -134,6 +160,9 @@ $dotnetFile = $null
 if     ($csproj.Count -gt 0) { $dotnetFile = $csproj[0].Name }
 elseif ($sln.Count    -gt 0) { $dotnetFile = $sln[0].Name }
 if ($dotnetFile) {
+    # .NET version-file PATH: global.json (pins the SDK band) for both MAUI and
+    # non-MAUI. Empty when absent.
+    $dotnetVerFile = Get-VersionFile @('global.json')
     # Scan every csproj in the tree (root and nested) for a MAUI marker.
     $isMaui = $false
     $allCsproj = @(Get-ChildItem -LiteralPath $repo -Filter '*.csproj' -File -Recurse -ErrorAction SilentlyContinue)
@@ -149,14 +178,14 @@ if ($dotnetFile) {
         Add-Finding '.NET MAUI' $dotnetFile `
             'MAUI: MVVM, XAML resource dictionaries, handlers over renderers, current-API adherence (no obsolete APIs)' `
             ".NET $TBD; MAUI $TBD (pin TFM + workload)" `
-            '["maui-skills:*","maui-current-apis"]' ''
+            '["maui-skills:*","maui-current-apis"]' '' $dotnetVerFile
     } else {
         $appStacks.Add('dotnet')
         # Non-MAUI .NET -> omit (no bundled domain skill). NOT [TBD] — a known omit.
         Add-Finding '.NET (non-MAUI)' $dotnetFile `
             '.NET: DI via host builder, async/await, options pattern, layered project structure' `
             ".NET $TBD (pin TargetFramework)" `
-            '' ''
+            '' '' $dotnetVerFile
     }
 }
 
@@ -196,26 +225,29 @@ foreach ($s in $appStacks) {
     if (-not $uniqStacks.Contains($s)) { $uniqStacks.Add($s) }
 }
 
-# Header (always emitted).
-[Console]::Out.WriteLine(('stack', 'signal', 'convention', 'manifestPin', 'domainSkills', 'flag') -join $TAB)
+# Header (always emitted). The 7th column (versionFile) is appended after flag.
+[Console]::Out.WriteLine(('stack', 'signal', 'convention', 'manifestPin', 'domainSkills', 'flag', 'versionFile') -join $TAB)
 
 if ($findings.Count -eq 0) {
     # None state: no recognizable stack signal at all. "none" is a valid value,
-    # but the absence of ANY stack is something a human should confirm.
+    # but the absence of ANY stack is something a human should confirm. No stack
+    # means no version-file concept -> empty 7th column.
     [Console]::Out.WriteLine((
         'none', '(no stack signal)',
         "$FLAG no recognizable stack signal found — confirm this is intentional or supply the stack",
-        'none', '', 'human') -join $TAB)
+        'none', '', 'human', '') -join $TAB)
     exit 0
 }
 
-# Ambiguous primary: more than one distinct application stack present.
+# Ambiguous primary: more than one distinct application stack present. The primary
+# is unresolved, so no single version-file is asserted -> empty 7th column (the
+# per-stack rows below still carry their own version-file paths).
 if ($uniqStacks.Count -gt 1) {
     $joined = ($uniqStacks -join ',')
     [Console]::Out.WriteLine((
         '(multi-stack)', $joined,
         "$FLAG multiple application stacks detected — confirm the primary stack for the project",
-        'n/a', '', 'human') -join $TAB)
+        'n/a', '', 'human', '') -join $TAB)
 }
 
 foreach ($line in $findings) { [Console]::Out.WriteLine($line) }
