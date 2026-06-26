@@ -18,7 +18,7 @@ One approved choice per purpose, so a redundant alternative is easy to spot.
 |---|---|---|
 | Plugin runtime | Claude Code skills (markdown) + `gh` CLI + `git` | the plugin surface and its GitHub writes |
 | Shell scripting | bash + `jq` (primary), PowerShell 7+ (fallback twin) | every component script ships both twins, byte-equivalent |
-| Plugin dependency | `superpowers` (cross-marketplace) | required dependency declared in `.claude-plugin/plugin.json` |
+| Plugin prerequisite | `superpowers` (cross-marketplace) | required prerequisite — install it explicitly from the `claude-plugins-official` marketplace |
 
 ## Adding a dependency (the gate)
 A new dependency is a PAUSE, not an autonomous call. Record what it buys, its license / OSS status, and why nothing approved suffices; a human approves before it's added.
