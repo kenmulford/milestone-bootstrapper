@@ -2,6 +2,26 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.3.1 — slash commands register in Claude Desktop
+
+**Theme:** Drop the cross-marketplace `superpowers` dependency so the plugin's skills register as slash commands in Claude Desktop (the CLI already worked). `superpowers` is still required at runtime — it's now a documented prerequisite you install yourself rather than an auto-installed dependency.
+
+### 🛠️ Maintenance
+
+| Issue | PR | What |
+|---|---|---|
+| #72 Drop the cross-marketplace `superpowers` dependency | this PR | Removed the `dependencies` array from `.claude-plugin/plugin.json`. The cross-marketplace declaration (`superpowers@claude-plugins-official`) made Claude Desktop load the plugin but skip registering its skills as slash commands (upstream `anthropics/claude-code#9444`); the CLI was unaffected. `superpowers` is now a documented prerequisite in the README and `.project/library-manifest.md` instead of an auto-installed dependency. Mirrors the confirmed sibling fix `milestone-driver#246`. The `marketplace.json` `allowCrossMarketplaceDependenciesOn` cleanup is deliberately deferred to a suite-wide companion, gated on all four suite plugins dropping the dependency first. |
+
+### Consumer notes (upgrading from v0.3.0)
+
+- **Install `superpowers` yourself.** It's no longer auto-installed when you install milestone-bootstrapper — add the `claude-plugins-official` marketplace and install `superpowers` alongside the plugin. The README and library-manifest now describe it as a prerequisite.
+- **Claude Desktop now registers the commands.** After upgrading and reloading, `/milestone-bootstrapper:*` registers and autocompletes in Claude Desktop. The Claude Code CLI was already registering them and is unchanged.
+- **No script, skill, schema, or plan-file contract changed** — this release only removes a manifest field and updates forward-facing docs.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none.
+
 ## v0.3.0 — runnable CI for detected stacks
 
 **Theme:** A freshly-bootstrapped repo's emitted `ci.yml` is now runnable — the bootstrapper detects the project's stack, persists it, and scaffolds the matching per-job runtime setup, so the first PR's CI goes green instead of failing on a missing toolchain.

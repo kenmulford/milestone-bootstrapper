@@ -8,7 +8,14 @@ It also makes the repo ready for `milestone-driver` to build in. It provisions t
 
 It's a Claude Code plugin with three commands. `plan` interviews you and previews what it would write. `apply` writes it all. `update` syncs it when your project changes later.
 
-**Install it** — either way pulls in the required `superpowers` plugin. Restart Claude Code afterward so the plugins load.
+**Install it.** First install the `superpowers` plugin — milestone-bootstrapper needs it at runtime, and you add it yourself (earlier releases installed it for you; now it's a manual step, so skipping it means the commands won't run). Add the official `claude-plugins-official` marketplace and install `superpowers` from it:
+
+```
+/plugin marketplace add anthropics/claude-plugins-official
+/plugin install superpowers@claude-plugins-official
+```
+
+Then install milestone-bootstrapper itself, using one of the two methods below. Restart Claude Code afterward so the plugins load.
 
 Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all four suite plugins (`milestone-bootstrapper`, `milestone-feeder`, `milestone-driver`, `milestone-coherence-reviewer`). Add one marketplace and install any of them:
 
