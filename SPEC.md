@@ -269,6 +269,13 @@ Defaults are **omitted** (a key at its default is not written — the configs st
 minimal). An entry is recorded only when the captured value diverges from the consumer
 tool's default.
 
+> **Feeder slice — an all-default object is left ABSENT, not written as `{}`.** For the
+> FEEDER slice, when every key is at its default the assembled object is empty and the
+> bootstrapper leaves `feeder.json` **ABSENT** (it does **not** emit `{}`), so
+> `milestone-feeder`'s absent-only first-run `setup` fires (issue #77). The DRIVER slice
+> always carries its ≥3 required Core keys (`integrationBranch`, `protectedBranch`,
+> `sourceGlobs`) and is always written, so this never applies to `driver.json`.
+
 > **`appRoots` adds NO consumed-config key.** The app-root prefixing (§4.1) is baked
 > into the `sourceGlobs` / `uiSurfaceGlobs` **values** at scaffold time, so the persisted
 > globs are ordinary root-absolute strings the driver/feeder already match from the repo

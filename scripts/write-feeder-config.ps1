@@ -4,14 +4,19 @@
 # config slice (the feeder-owned keys: `projectDocs`, `reviewer`).
 #
 # What this does, in plain terms:
-#   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with a valid
-#   feeder profile so `milestone-feeder` runs with no further setup. `apply` is
-#   non-interactive, so this is a deterministic, reusable writer it calls — NOT
-#   the interactive `milestone-feeder:setup` interview (that path is interview-
-#   only, with no non-interactive entry, so it cannot run unattended). Recorded
-#   decision: issue #5 "✅ Design decision — Option A". This writer produces the
-#   identical file `setup`'s Phase 3 would, to the same schema and the same
-#   absent-means-default discipline. The PowerShell 7+ twin of
+#   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with the correct
+#   feeder-config SIGNAL — a present, non-empty `feeder.json` when any key diverges
+#   from its default, or NO `feeder.json` at all when every key is at its default —
+#   so `milestone-feeder`'s first-run `setup` runs exactly when it should (it
+#   auto-invokes on an ABSENT file). `apply` is non-interactive, so this is a
+#   deterministic, reusable writer it calls — NOT the interactive
+#   `milestone-feeder:setup` interview (that path is interview-only, with no
+#   non-interactive entry, so it cannot run unattended). Recorded decision: issue
+#   #5 "✅ Design decision — Option A". For the non-default case this writer
+#   produces the identical file `setup`'s Phase 3 would, to the same schema and the
+#   same absent-means-default discipline; when every key is at its default the
+#   assembled object is empty and the file is deliberately left ABSENT rather than
+#   emitted as `{}` (issue #77) — see Behavior below. The PowerShell 7+ twin of
 #   write-feeder-config.sh (suite cross-platform convention).
 #
 # Authoritative schema (DRIFT GUARDRAIL — do not widen without updating both):
@@ -21,7 +26,10 @@
 #       - "Own keys" table          -> projectDocs (default ".project/"),
 #                                       reviewer    (default "milestone-driver")
 #       - "Absent-means-default discipline" -> omit a key left at its BUNDLED
-#                                       default; an empty `{}` is a valid profile.
+#                                       default; an empty `{}` remains a valid
+#                                       profile to READ, but this writer no longer
+#                                       EMITS it — an all-default slice is left
+#                                       ABSENT (issue #77, see Behavior).
 #   This slice writes ONLY `projectDocs` and `reviewer`. It deliberately does NOT
 #   write the shared/driver keys (uiSurfaceGlobs, integrationBranch, the
 #   consumer's sourceGlobs, domainSkills, versioning, nonNegotiables) — those are
@@ -38,7 +46,12 @@
 #   Env fallbacks (params win): FEEDER_PROJECT_DOCS, FEEDER_REVIEWER, FEEDER_REPO.
 #
 # Behavior:
-#   - ALWAYS writes the file (even `{}`) so config-presence is unambiguous.
+#   - Writes the file ONLY when the assembled config DIVERGES from the bundled
+#     defaults. When every key is at its default the assembled object is empty and
+#     the file is deliberately left ABSENT rather than emitted as `{}`, so
+#     milestone-feeder's absent-only first-run `setup` trigger fires (issue #77).
+#     Non-destructive: an all-default run never writes AND never deletes an
+#     existing file.
 #   - Idempotent / non-destructive: identical existing content is left byte-
 #     identical (true no-op); re-runs never duplicate. (Key-level diff+patch of
 #     human edits is the future `update` skill's job, not this writer's.)
@@ -46,7 +59,8 @@
 #     stderr and exit non-zero — never leaving a partial/invalid file in place.
 #
 # Run it:  ./scripts/write-feeder-config.ps1 -Repo /path/to/target [-ProjectDocs ...] [-Reviewer ...]
-# Exit 0 = file is present and correct. Exit 1 = bad input. Exit 2 = write/serialize failure.
+# Exit 0 = feeder.json is present-and-correct OR deliberately left absent (all keys at default).
+# Exit 1 = bad input. Exit 2 = write/serialize failure.
 
 [CmdletBinding()]
 param(
@@ -89,7 +103,8 @@ if (-not $reviewerValid) {
 # --- Assemble the minimal object (absent-means-default: omit bundled defaults) --
 # An ordered hashtable preserves key order in the serialized JSON; add only keys
 # whose resolved value DIVERGES from the bundled default. An all-default run
-# leaves it empty, which serializes to `{}`.
+# leaves it empty, which would serialize to `{}` — but that is then NOT written
+# (see the empty-object guard below, issue #77).
 $obj = [ordered]@{}
 if ($ProjectDocs -ne $DefaultProjectDocs) { $obj['projectDocs'] = $ProjectDocs }
 # reviewer omit test is against the BUNDLED default, so a resolved "internal" or
@@ -113,6 +128,15 @@ try {
 # --- Resolve the destination path ----------------------------------------------
 $ConfigDir  = Join-Path ($Repo.TrimEnd('/', '\')) '.milestone-config'
 $ConfigFile = Join-Path $ConfigDir 'feeder.json'
+
+# --- Never emit an empty {} — leave feeder.json ABSENT (issue #77) --------------
+# (Same rationale as the bash twin.) An all-default run leaves $obj empty; rather
+# than emit `{}`, leave the file absent so milestone-feeder's absent-only first-run
+# setup fires. Non-destructive: never writes AND never deletes an existing file.
+if ($obj.Count -eq 0) {
+    Write-Output "All feeder keys at bundled defaults — leaving $ConfigFile absent so milestone-feeder's first-run setup fires."
+    exit 0
+}
 
 # Guard: if the config path is an existing DIRECTORY, a later Move-Item -Force
 # would move the temp file INTO it (feeder.json/<tmp>) and falsely report success

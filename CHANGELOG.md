@@ -2,6 +2,27 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.4.0 — feeder.json emission fixed to fire first-run setup
+
+**Theme:** Stop emitting an empty `{}` `feeder.json`. The bootstrapper deliberately always wrote the file, even as `{}` when every feeder key was at its bundled default — but `milestone-feeder`'s `plan` only auto-invokes `milestone-feeder:setup` when `feeder.json` is **ABSENT**. A present `{}` therefore silently defeated first-run setup (no label alignment, no key confirmation). The writer now leaves the file absent when the assembled object would be `{}`, so an all-default freshly-bootstrapped repo correctly triggers setup on its first `plan`.
+
+### 🐛 Fixes
+
+| Issue | PR | What |
+|---|---|---|
+| #77 Bootstrapper emits empty `{}` feeder.json, defeating milestone-feeder's first-run setup | this PR | `write-feeder-config` (both twins) now short-circuits when the assembled object is empty — `[ "$NEW_CONTENT" = "{}" ]` (bash) / `$obj.Count -eq 0` (pwsh) — printing a "leaving … absent" message and exiting 0 **without writing** rather than emitting `{}`. Non-destructive: an all-default run never writes AND never deletes an existing file (stale-`{}` remediation is out of scope). Any run that resolves a non-default key (`--reviewer internal`/`false`, non-default `--project-docs`) still writes a present file, unchanged. Header/docstring invariant reconciled in lockstep across both twins (Behavior, schema-guardrail, "what this does", exit-code contract, assembly comment), plus `skills/apply/SKILL.md`, `skills/update/SKILL.md` (doc-only — `update`'s union logic is unchanged), and `SPEC.md §6.1`. This repo's own committed `{}` `.milestone-config/feeder.json` is removed so the repo dogfoods the new behavior. |
+
+### Consumer notes (upgrading from v0.3.1)
+
+- **The writer no longer emits an empty `{}` `feeder.json`.** A freshly-bootstrapped repo whose feeder keys are all at their bundled defaults now gets **NO** `feeder.json`, so its first `milestone-feeder:plan` correctly triggers `setup` (label alignment + key confirmation) instead of being silently skipped by a present `{}`.
+- **Already-bootstrapped repos carrying a stale `{}` are NOT auto-remediated** by this change — discovery/remediation of pre-existing `{}` artifacts is deliberately out of scope (issue #77). If your repo carries a stale `{}` `feeder.json` and you want first-run setup to fire, delete it manually.
+- **A run that resolves any non-default feeder key still writes a present file, unchanged** — only the all-default case changed.
+- **Supersedes the v0.2.1 `#54` note** ("`feeder.json` is now `{}` — the exact output `scripts/write-feeder-config.sh` emits for this repo"): the writer no longer emits `{}`, and this repo's own all-default `feeder.json` is now left **absent** (the committed `{}` is removed).
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: this PR removes this repo's committed `{}` `.milestone-config/feeder.json` (the exact stale artifact the fix targets, per the v0.2.1 `#54` coupling) so the repo dogfoods the new absent-when-empty behavior. `driver.json` is untouched.
+
 ## v0.3.1 — slash commands register in Claude Desktop
 
 **Theme:** Drop the cross-marketplace `superpowers` dependency so the plugin's skills register as slash commands in Claude Desktop (the CLI already worked). `superpowers` is still required at runtime — it's now a documented prerequisite you install yourself rather than an auto-installed dependency.

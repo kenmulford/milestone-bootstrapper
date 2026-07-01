@@ -4,14 +4,19 @@
 # config slice (the feeder-owned keys: `projectDocs`, `reviewer`).
 #
 # What this does, in plain terms:
-#   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with a valid
-#   feeder profile so `milestone-feeder` runs with no further setup. `apply` is
-#   non-interactive, so this is a deterministic, reusable writer it calls — NOT
-#   the interactive `milestone-feeder:setup` interview (that path is interview-
-#   only, with no non-interactive entry, so it cannot run unattended). Recorded
-#   decision: issue #5 "✅ Design decision — Option A". This writer produces the
-#   identical file `setup`'s Phase 3 would, to the same schema and the same
-#   absent-means-default discipline.
+#   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with the correct
+#   feeder-config SIGNAL — a present, non-empty `feeder.json` when any key diverges
+#   from its default, or NO `feeder.json` at all when every key is at its default —
+#   so `milestone-feeder`'s first-run `setup` runs exactly when it should (it
+#   auto-invokes on an ABSENT file). `apply` is non-interactive, so this is a
+#   deterministic, reusable writer it calls — NOT the interactive
+#   `milestone-feeder:setup` interview (that path is interview-only, with no
+#   non-interactive entry, so it cannot run unattended). Recorded decision: issue
+#   #5 "✅ Design decision — Option A". For the non-default case this writer
+#   produces the identical file `setup`'s Phase 3 would, to the same schema and the
+#   same absent-means-default discipline; when every key is at its default the
+#   assembled object is `{}` and the file is deliberately left ABSENT rather than
+#   emitted as `{}` (issue #77) — see Behavior below.
 #
 # Authoritative schema (DRIFT GUARDRAIL — do not widen without updating both):
 #   The feeder-owned key set and the absent-means-default discipline are defined
@@ -20,7 +25,10 @@
 #       - "Own keys" table          -> projectDocs (default ".project/"),
 #                                       reviewer    (default "milestone-driver")
 #       - "Absent-means-default discipline" -> omit a key left at its BUNDLED
-#                                       default; an empty `{}` is a valid profile.
+#                                       default; an empty `{}` remains a valid
+#                                       profile to READ, but this writer no longer
+#                                       EMITS it — an all-default slice is left
+#                                       ABSENT (issue #77, see Behavior).
 #   This slice writes ONLY `projectDocs` and `reviewer`. It deliberately does NOT
 #   write the shared/driver keys (uiSurfaceGlobs, integrationBranch, the
 #   consumer's sourceGlobs, domainSkills, versioning, nonNegotiables) — those are
@@ -40,8 +48,12 @@
 #   Env fallbacks (args win): FEEDER_PROJECT_DOCS, FEEDER_REVIEWER, FEEDER_REPO.
 #
 # Behavior:
-#   - ALWAYS writes the file (even `{}`) so config-presence is unambiguous: an
-#     absent file and an empty `{}` are deliberately distinct signals.
+#   - Writes the file ONLY when the assembled config DIVERGES from the bundled
+#     defaults. When every key is at its default the assembled object is `{}` and
+#     the file is deliberately left ABSENT rather than emitted as `{}`, so
+#     milestone-feeder's absent-only first-run `setup` trigger fires (issue #77).
+#     Non-destructive: an all-default run never writes AND never deletes an
+#     existing file.
 #   - Idempotent / non-destructive: when the assembled object is byte-identical
 #     to an existing file's content, the file is left untouched (true no-op);
 #     re-runs never duplicate. (Key-level diff+patch of human edits is the
@@ -50,7 +62,8 @@
 #     exit non-zero — never leaving a partially-written / invalid file in place.
 #
 # Run it:  ./scripts/write-feeder-config.sh --repo /path/to/target [--project-docs ...] [--reviewer ...]
-# Exit 0 = file is present and correct. Exit 1 = bad input. Exit 2 = write/serialize failure.
+# Exit 0 = feeder.json is present-and-correct OR deliberately left absent (all keys at default).
+# Exit 1 = bad input. Exit 2 = write/serialize failure.
 
 set -euo pipefail
 
@@ -89,7 +102,8 @@ command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required but not found on 
 
 # --- Assemble the minimal object (absent-means-default: omit bundled defaults) --
 # Start from {} and add only keys whose resolved value DIVERGES from the bundled
-# default. Build the jq filter incrementally so an all-default run yields `{}`.
+# default. Build the jq filter incrementally so an all-default run yields `{}`
+# (which is then NOT written — see the empty-object guard below, issue #77).
 filter='.'
 args=()
 if [ "$PROJECT_DOCS" != "$DEFAULT_PROJECT_DOCS" ]; then
@@ -114,6 +128,19 @@ fi
 # --- Resolve the destination path ---------------------------------------------
 CONFIG_DIR="${REPO%/}/.milestone-config"
 CONFIG_FILE="${CONFIG_DIR}/feeder.json"
+
+# --- Never emit an empty {} — leave feeder.json ABSENT (issue #77) --------------
+# When every feeder key is at its bundled default the assembled object is `{}`.
+# Emitting that as a present file would DEFEAT milestone-feeder's absent-only
+# first-run `setup` trigger (its `plan` auto-invokes setup only when feeder.json
+# is ABSENT). So leave the file absent rather than writing `{}`. Non-destructive:
+# an all-default run never writes AND never deletes an existing file here
+# (stale-`{}` remediation of already-bootstrapped repos is a separate,
+# out-of-scope concern — issue #77).
+if [ "$NEW_CONTENT" = "{}" ]; then
+  echo "All feeder keys at bundled defaults — leaving ${CONFIG_FILE} absent so milestone-feeder's first-run setup fires."
+  exit 0
+fi
 
 # Guard: if the config path is an existing DIRECTORY, a later `mv` would silently
 # move the temp file INTO it (feeder.json/<tmp>) and falsely report success — the
