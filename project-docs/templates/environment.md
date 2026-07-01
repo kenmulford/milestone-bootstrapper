@@ -32,3 +32,7 @@ Third-party services the app depends on: auth / identity, payments, email / SMS,
 ## Runtime & hosting
 Where it runs and the runtime/version targets (hosting platform, language-runtime versions, regions). For mandated frameworks and packages, cross-reference `library-manifest.md`.
 > [TBD]
+
+## Deployment targets
+Where the app is **deployed** — the hosting vendor / platform / target (Cloudflare, AWS, Azure, Vercel, Netlify, Fly.io, a self-managed host). **Records** the deploy destination; it does **not** provision it. Boundary vs `## Runtime & hosting`: that anchor is the runtime/version targets and regions the app *needs*; this anchor is *where it is deployed to* and who hosts it.
+> [TBD] — e.g. "Cloudflare Workers + Pages (prod); Vercel preview deploy per PR."
