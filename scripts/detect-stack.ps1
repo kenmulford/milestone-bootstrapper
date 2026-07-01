@@ -127,6 +127,12 @@ if (Test-Path -LiteralPath $pkg -PathType Leaf) {
         $deps = @()
         if ($pkgJson.dependencies)    { $deps += $pkgJson.dependencies.PSObject.Properties.Name }
         if ($pkgJson.devDependencies) { $deps += $pkgJson.devDependencies.PSObject.Properties.Name }
+        # MOST-SPECIFIC-FIRST framework discrimination on exact dependency-KEY
+        # membership (exactly one branch fires -> one node-family finding). Next
+        # MUST precede React: a Next app carries BOTH 'next' and 'react'. React /
+        # Vue / Svelte / Next are ABSENT from the setup Stack->domainSkills table,
+        # so they omit domainSkills (empty field) — the same never-fabricate
+        # convention as generic Node, NOT [TBD].
         $isAngular = ($deps | Where-Object { $_ -like '@angular/*' } | Select-Object -First 1) -ne $null
         if ($isAngular) {
             $appStacks.Add('angular')
@@ -134,6 +140,30 @@ if (Test-Path -LiteralPath $pkg -PathType Leaf) {
                 'Angular: standalone components, typed reactive forms, OnPush change detection, feature-module/route layout' `
                 "Node $TBD; Angular $TBD (pin @angular/core version)" `
                 '["angular-skills:angular-developer"]' '' $nodeVerFile
+        } elseif ($deps -contains 'next') {
+            $appStacks.Add('next')
+            Add-Finding 'Next.js (Node)' 'package.json' `
+                'Next.js: app-router/file-based routing, server components by default, colocated data fetching, API route handlers' `
+                "Node $TBD; Next.js $TBD (pin next version)" `
+                '' '' $nodeVerFile
+        } elseif ($deps -contains 'react') {
+            $appStacks.Add('react')
+            Add-Finding 'React (Node)' 'package.json' `
+                'React: function components with hooks, unidirectional data flow, composition over inheritance, stable keys on lists' `
+                "Node $TBD; React $TBD (pin react version)" `
+                '' '' $nodeVerFile
+        } elseif ($deps -contains 'vue') {
+            $appStacks.Add('vue')
+            Add-Finding 'Vue (Node)' 'package.json' `
+                'Vue: single-file components, Composition API, reactive refs/computed, scoped styles' `
+                "Node $TBD; Vue $TBD (pin vue version)" `
+                '' '' $nodeVerFile
+        } elseif ($deps -contains 'svelte') {
+            $appStacks.Add('svelte')
+            Add-Finding 'Svelte (Node)' 'package.json' `
+                'Svelte: single-file components, reactive declarations, stores for shared state, compile-time minimal runtime' `
+                "Node $TBD; Svelte $TBD (pin svelte version)" `
+                '' '' $nodeVerFile
         } else {
             $appStacks.Add('node')
             # Generic Node -> omit (no mapped skill). NOT fabricated, NOT [TBD].

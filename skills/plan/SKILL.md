@@ -114,6 +114,10 @@ The detector emits TSV per run: a header then one finding per stack — columns 
   |---|---|
   | `Node (generic)` | `node` |
   | `Angular (Node)` | `node` |
+  | `Next.js (Node)` | `node` |
+  | `React (Node)` | `node` |
+  | `Vue (Node)` | `node` |
+  | `Svelte (Node)` | `node` |
   | `Node ([TBD])` (malformed package.json) | `node` |
   | `Python (<framework>)` (e.g. `Python (FastAPI)`, `Python (Django)`, `Python (Flask)`) | `python` |
   | `Python` (framework unresolved, flagged) | `python` |
