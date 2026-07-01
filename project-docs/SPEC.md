@@ -19,7 +19,7 @@ Make explicit the context the suite's tools otherwise infer from neighboring cod
 | Owner | tool setup | the human team |
 | Read by | hooks + skill mechanics | reasoning steps in feeder / triage / implementer / reviewers |
 
-Not a place for secrets, mechanics, or per-run state.
+Not a place for secret **values**, mechanics, or per-run state — `config-catalog.md` records config & secret key *norms* (names, source buckets, shapes), never the values themselves.
 
 ---
 
@@ -34,6 +34,7 @@ Consuming repo, default `.project/` (the feeder's `projectDocs` key points here;
 | `library-manifest.md` | Approved/mandated libraries + the new-dependency gate | implementer (new-dep gate), coherence-reviewer | gate has no allowlist; can't flag redundant libs |
 | `conventions.md` | Naming, layout, test patterns, canonical exemplars | implementer, coherence-reviewer, feeder | reviewers/implementer rely on inferred convention only |
 | `environment.md` | Runtime/prod environment model: data stores + test-DB isolation, caching, async, external services | feeder, triage, implementer, driver (test/E2E setup) | data/test/cache decisions are invented per issue and drift |
+| `config-catalog.md` | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs (names · buckets · shapes · env · required?, never values) | feeder, triage, implementer, coherence-reviewer | config/secret/CORS keys are guessed per issue and built wrong first-try |
 
 **Absent-means-skip throughout** — a repo includes only the docs it needs (a backend-only repo omits `design-system.md`). Same consumer-driven minimalism as the driver profile.
 
@@ -81,6 +82,7 @@ Full content in [`templates/`](templates/). Stable section sets:
 - **library-manifest.md** — Runtime & frameworks · Approved libraries (by purpose) · Adding a dependency (the gate) · Avoid / banned
 - **conventions.md** — Naming · File & folder layout · Test patterns · Canonical exemplars · Commits & PRs
 - **environment.md** — Environments · Data stores (+ test-DB isolation) · Caching · Async & messaging · External services · Runtime & hosting · Deployment targets
+- **config-catalog.md** — Connection strings · Auth / JWT · Third-party API keys · Notification targets · CORS origins · App config (per-environment) · Build outputs
 
 ---
 

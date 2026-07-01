@@ -1,7 +1,7 @@
 # The project-docs writing layer
 
 The deterministic placement step that takes the **already-resolved** project
-understanding and writes it into the six `.project/` docs — replacing the `[TBD]`
+understanding and writes it into the seven `.project/` docs — replacing the `[TBD]`
 placeholder under each template's stable `##` anchor. This is the back half of
 **Job 1** (project-docs population, [BRIEF.md:28-41](../BRIEF.md)): the
 understanding-interview engine (#4, [docs/understanding-interview.md](understanding-interview.md))
@@ -78,6 +78,7 @@ above — read them, do not re-derive from this summary):
 | Data stores + test-data isolation, caching, async/messaging, external services, runtime/hosting, deployment targets | `environment.md` | `Environments` · `Data stores` · `Caching` · `Async & messaging` · `External services & integrations` · `Runtime & hosting` · `Deployment targets` |
 | Stack best-practice conventions + versioning policy | `conventions.md` | `Naming` · `File & folder layout` · `Test patterns` · `Canonical exemplars (mirror these)` · `Commits & PRs` · `Versioning` |
 | Design tokens/components/layout/states (**UI projects only**) | `design-system.md` + `tokens.json` | `Design tokens` · `Component inventory` · `Layout & responsive rules` · `Required states` · `Accessibility baseline` · `Voice & microcopy` |
+| Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs (names · buckets · shapes · env · required?, never values) | `config-catalog.md` | `Connection strings` · `Auth / JWT` · `Third-party API keys` · `Notification targets` · `CORS origins` · `App config (per-environment)` · `Build outputs` |
 
 The anchor names are read from the live templates in
 [project-docs/templates/](../project-docs/templates/). They are **citation

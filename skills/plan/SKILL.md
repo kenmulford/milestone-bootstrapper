@@ -65,6 +65,7 @@ Run the understanding interview exactly as `docs/understanding-interview.md` def
 | 5 · Mandated packages | Libraries/tooling required by purpose (distinct from detection) | `library-manifest.md` |
 | 6 · Versioning policy | SemVer y/n, version-file location, bump cadence | `conventions.md` |
 | 7 · Design system *(UI projects only)* | Tokens, components, layout, required states, a11y, voice | `design-system.md` + `tokens.json` |
+| 8 · Configuration & secrets | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, never values | `config-catalog.md` |
 
 Honor the engine's recording discipline (`docs/understanding-interview.md` §1, §3) verbatim:
 
