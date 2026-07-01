@@ -113,15 +113,47 @@ fi
 # ---------------------------------------------------------------------------
 # Node — package.json (+ Angular discrimination)
 # ---------------------------------------------------------------------------
-# emit_node_angular / emit_node_generic: the Angular and generic-Node findings,
-# factored so both the jq path and the jq-absent grep fallback emit identically
-# (single source for the Stack->domainSkills mapping; no drift between paths).
+# emit_node_angular / emit_node_next / emit_node_react / emit_node_vue /
+# emit_node_svelte / emit_node_generic: the per-framework Node findings, factored
+# so both the jq path and the jq-absent grep fallback emit identically (single
+# source for the Stack->domainSkills mapping; no drift between paths). React /
+# Vue / Svelte / Next are ABSENT from the setup Stack->domainSkills table, so they
+# omit domainSkills (empty field) — the same never-fabricate-a-skill-mapping
+# convention as generic Node (:16-17 contract), NOT [TBD].
 emit_node_angular() {
   app_stacks+=("angular")
   emit_finding "Angular (Node)" "package.json" \
     "Angular: standalone components, typed reactive forms, OnPush change detection, feature-module/route layout" \
     "Node $TBD; Angular $TBD (pin @angular/core version)" \
     '["angular-skills:angular-developer"]' "" "$node_verfile"
+}
+emit_node_next() {
+  app_stacks+=("next")
+  emit_finding "Next.js (Node)" "package.json" \
+    "Next.js: app-router/file-based routing, server components by default, colocated data fetching, API route handlers" \
+    "Node $TBD; Next.js $TBD (pin next version)" \
+    "" "" "$node_verfile"
+}
+emit_node_react() {
+  app_stacks+=("react")
+  emit_finding "React (Node)" "package.json" \
+    "React: function components with hooks, unidirectional data flow, composition over inheritance, stable keys on lists" \
+    "Node $TBD; React $TBD (pin react version)" \
+    "" "" "$node_verfile"
+}
+emit_node_vue() {
+  app_stacks+=("vue")
+  emit_finding "Vue (Node)" "package.json" \
+    "Vue: single-file components, Composition API, reactive refs/computed, scoped styles" \
+    "Node $TBD; Vue $TBD (pin vue version)" \
+    "" "" "$node_verfile"
+}
+emit_node_svelte() {
+  app_stacks+=("svelte")
+  emit_finding "Svelte (Node)" "package.json" \
+    "Svelte: single-file components, reactive declarations, stores for shared state, compile-time minimal runtime" \
+    "Node $TBD; Svelte $TBD (pin svelte version)" \
+    "" "" "$node_verfile"
 }
 emit_node_generic() {
   app_stacks+=("node")
@@ -139,10 +171,24 @@ if [ -f "$repo/package.json" ]; then
   node_verfile="$(version_file '.nvmrc' '.node-version')" || node_verfile=""
   if [ "$have_jq" = "1" ]; then
     if jq -e . "$repo/package.json" >/dev/null 2>&1; then
-      # Valid JSON, jq present: precise dependency-key Angular discrimination.
+      # Valid JSON, jq present: precise dependency-key framework discrimination,
+      # MOST-SPECIFIC-FIRST (exactly one branch fires -> one node-family finding).
+      # Next MUST precede React: a Next app carries BOTH `next` and `react`.
       if jq -e '((.dependencies // {}) + (.devDependencies // {})) | keys[] | select(startswith("@angular/"))' \
            "$repo/package.json" >/dev/null 2>&1; then
         emit_node_angular
+      elif jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("next")' \
+           "$repo/package.json" >/dev/null 2>&1; then
+        emit_node_next
+      elif jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("react")' \
+           "$repo/package.json" >/dev/null 2>&1; then
+        emit_node_react
+      elif jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("vue")' \
+           "$repo/package.json" >/dev/null 2>&1; then
+        emit_node_vue
+      elif jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("svelte")' \
+           "$repo/package.json" >/dev/null 2>&1; then
+        emit_node_svelte
       else
         emit_node_generic
       fi
@@ -159,9 +205,22 @@ if [ -f "$repo/package.json" ]; then
     # back to a grep-based Angular check on the raw file so the Angular mapping
     # and generic-Node classification still work — parity with the pwsh twin,
     # which parses with built-in ConvertFrom-Json and needs no external tool.
-    # Mirrors the Python block's grep-on-signal-file convention above.
+    # Mirrors the Python block's grep-on-signal-file convention above. Same
+    # most-specific-first order as the jq path (Next before React). Each new
+    # pattern anchors to a dependency KEY followed by a colon to avoid array-value
+    # false positives; a script-KEY false positive (e.g. a "react" npm script) is
+    # an accepted known limitation of the jq-ABSENT fallback, consistent with the
+    # existing Angular fallback — the jq path and the pwsh twin are precise.
     if grep -qE '"@angular/' "$repo/package.json" 2>/dev/null; then
       emit_node_angular
+    elif grep -qE '"next"[[:space:]]*:' "$repo/package.json" 2>/dev/null; then
+      emit_node_next
+    elif grep -qE '"react"[[:space:]]*:' "$repo/package.json" 2>/dev/null; then
+      emit_node_react
+    elif grep -qE '"vue"[[:space:]]*:' "$repo/package.json" 2>/dev/null; then
+      emit_node_vue
+    elif grep -qE '"svelte"[[:space:]]*:' "$repo/package.json" 2>/dev/null; then
+      emit_node_svelte
     else
       emit_node_generic
     fi
