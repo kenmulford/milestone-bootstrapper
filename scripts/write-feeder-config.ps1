@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 #
 # write-feeder-config.ps1 — write the target repo's `.milestone-config/feeder.json`
-# config slice (the feeder-owned keys: `projectDocs`, `reviewer`).
+# config slice (the feeder-owned keys: `projectDocs`, `reviewer`, `versioning`).
 #
 # What this does, in plain terms:
 #   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with the correct
@@ -24,17 +24,28 @@
 #   by the canonical schema doc:
 #     milestone-feeder/docs/profile-schema.md
 #       - "Own keys" table          -> projectDocs (default ".project/"),
-#                                       reviewer    (default "milestone-driver")
+#                                       reviewer    (default "milestone-driver"),
+#                                       versioning  ("semver"|"none"; NO bundled
+#                                                    default — absent = infer-or-ask;
+#                                                    profile-schema.md:52,115-133)
 #       - "Absent-means-default discipline" -> omit a key left at its BUNDLED
 #                                       default; an empty `{}` remains a valid
 #                                       profile to READ, but this writer no longer
 #                                       EMITS it — an all-default slice is left
 #                                       ABSENT (issue #77, see Behavior).
-#   This slice writes ONLY `projectDocs` and `reviewer`. It deliberately does NOT
-#   write the shared/driver keys (uiSurfaceGlobs, integrationBranch, the
-#   consumer's sourceGlobs, domainSkills, versioning, nonNegotiables) — those are
-#   read from the driver config and owned by the driver-config slice (#8). If the
-#   feeder's schema gains or renames an own-key, update this script in lockstep.
+#   This slice writes the feeder-OWNED keys `projectDocs`, `reviewer`, and
+#   `versioning`. The two `versioning` keys are DISTINCT: this writes
+#   `feeder.json#versioning` — the feeder's own STRING enum "semver"|"none" (its
+#   read-contract key, profile-schema.md:52), which is NOT the driver's BOOLEAN
+#   `driver.json#versioning` (owned by the driver-config slice #8, ever only
+#   written as `false`). A single Tier-6 answer maps to BOTH keys (dual-write):
+#   versioned => driver OMITS / feeder "semver"; non-versioned => driver `false` /
+#   feeder "none"; skipped/[TBD] => BOTH omit. This slice deliberately does NOT
+#   write the shared/driver keys (uiSurfaceGlobs, integrationBranch, the consumer's
+#   sourceGlobs, domainSkills, nonNegotiables, and the driver's BOOLEAN versioning)
+#   — those are read from the driver config and owned by the driver-config slice
+#   (#8). If the feeder's schema gains or renames an own-key, update this script in
+#   lockstep.
 #
 # Inputs (resolved values — this writer does NOT re-derive them):
 #   -Repo <dir>          target repo root (default: current directory)
@@ -43,7 +54,16 @@
 #   -Reviewer <val>      "milestone-driver" | "internal" | false
 #                        (default "milestone-driver"; omitted when equal to the
 #                         BUNDLED default — so a resolved "internal" IS written)
-#   Env fallbacks (params win): FEEDER_PROJECT_DOCS, FEEDER_REVIEWER, FEEDER_REPO.
+#   -Versioning <val>    "semver" | "none" — the Tier-6 versioning policy as the
+#                        feeder's STRING enum. Three-way UNSET-sentinel (NOT the
+#                        omit-when-equals-default rule the two keys above use,
+#                        because feeder#versioning has NO bundled default):
+#                        "semver" => emit "versioning":"semver"; "none" => emit
+#                        "versioning":"none"; not-passed => OMIT the key entirely
+#                        (never a placeholder — absent = infer-or-ask). Any other
+#                        value is bad input (exit 1).
+#   Env fallbacks (params win): FEEDER_PROJECT_DOCS, FEEDER_REVIEWER,
+#                               FEEDER_VERSIONING, FEEDER_REPO.
 #
 # Behavior:
 #   - Writes the file ONLY when the assembled config DIVERGES from the bundled
@@ -58,7 +78,7 @@
 #   - Errors (unwritable path, serialize failure) surface a clear message on
 #     stderr and exit non-zero — never leaving a partial/invalid file in place.
 #
-# Run it:  ./scripts/write-feeder-config.ps1 -Repo /path/to/target [-ProjectDocs ...] [-Reviewer ...]
+# Run it:  ./scripts/write-feeder-config.ps1 -Repo /path/to/target [-ProjectDocs ...] [-Reviewer ...] [-Versioning ...]
 # Exit 0 = feeder.json is present-and-correct OR deliberately left absent (all keys at default).
 # Exit 1 = bad input. Exit 2 = write/serialize failure.
 
@@ -68,7 +88,12 @@ param(
     [string]$ProjectDocs,
     # Reviewer accepts the string enum or the boolean $false; typed as object so
     # `-Reviewer:$false` and `-Reviewer false` both round-trip to the JSON false.
-    [object]$Reviewer
+    [object]$Reviewer,
+    # Versioning is the feeder's own STRING enum "semver"|"none" (never a boolean),
+    # so a plain [string] param — no bundled default (absent = infer-or-ask). Its
+    # supplied-ness is tracked below so an unpassed value is OMITTED (three-way),
+    # mirroring write-driver-config.ps1's UNSET handling for its optional keys.
+    [string]$Versioning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,6 +113,11 @@ if (-not $PSBoundParameters.ContainsKey('ProjectDocs')) {
 if (-not $PSBoundParameters.ContainsKey('Reviewer')) {
     $Reviewer = if ($null -ne $env:FEEDER_REVIEWER -and $env:FEEDER_REVIEWER -ne '') { $env:FEEDER_REVIEWER } else { $DefaultReviewer }
 }
+# versioning supplied-ness: param wins, else non-empty env, else NOT supplied
+# (=> OMIT). Tracked as a hashtable so an unpassed value is omitted (three-way),
+# distinct from a passed value — feeder#versioning has NO bundled default. Mirrors
+# write-driver-config.ps1:181's $versioningIn supplied-ness idiom.
+$versioningIn = if ($PSBoundParameters.ContainsKey('Versioning')) { @{ Supplied = $true; Value = $Versioning } } elseif ($null -ne $env:FEEDER_VERSIONING -and $env:FEEDER_VERSIONING -ne '') { @{ Supplied = $true; Value = $env:FEEDER_VERSIONING } } else { @{ Supplied = $false } }
 
 # Normalize the string "false" (from env / positional) to the boolean $false.
 if ($Reviewer -is [string] -and $Reviewer -eq 'false') { $Reviewer = $false }
@@ -97,6 +127,15 @@ $reviewerValid = ($Reviewer -is [bool] -and $Reviewer -eq $false) -or
                  ($Reviewer -is [string] -and ($Reviewer -in @('milestone-driver', 'internal')))
 if (-not $reviewerValid) {
     [Console]::Error.WriteLine("ERROR: -Reviewer must be `"milestone-driver`", `"internal`", or `$false (got: $Reviewer).")
+    exit 1
+}
+
+# --- Validate versioning against the feeder schema's enum (unset => omit) -------
+# Only "semver"|"none" are valid (profile-schema.md:52); any other PASSED value is
+# bad input. Unset (not supplied) is valid and means OMIT (absent = infer-or-ask).
+# Mirrors the -Reviewer enum block above and write-driver-config.ps1:259-274.
+if ($versioningIn.Supplied -and ($versioningIn.Value -notin @('semver', 'none'))) {
+    [Console]::Error.WriteLine("ERROR: -Versioning must be `"semver`" or `"none`" (got: $($versioningIn.Value)).")
     exit 1
 }
 
@@ -111,6 +150,12 @@ if ($ProjectDocs -ne $DefaultProjectDocs) { $obj['projectDocs'] = $ProjectDocs }
 # $false both diverge and ARE written.
 $reviewerIsDefault = ($Reviewer -is [string]) -and ($Reviewer -eq $DefaultReviewer)
 if (-not $reviewerIsDefault) { $obj['reviewer'] = $Reviewer }
+# versioning is a three-way UNSET-sentinel key (no bundled default): emit the
+# resolved string enum, or OMIT when unset. Adding it makes $obj non-empty so the
+# empty-object guard below (issue #77) correctly WRITES the file; an all-default
+# run with no versioning leaves $obj empty and stays ABSENT (unchanged #77). Same
+# slot (after reviewer) as the .sh twin so output stays byte-identical.
+if ($versioningIn.Supplied) { $obj['versioning'] = $versioningIn.Value }
 
 try {
     if ($obj.Count -eq 0) {
