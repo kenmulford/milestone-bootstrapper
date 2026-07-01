@@ -2,26 +2,38 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
-## v0.4.0 — feeder.json emission fixed to fire first-run setup
+## v0.4.0 — bootstrapper fidelity: config/secrets, deploy targets, versioning & stack detection
 
-**Theme:** Stop emitting an empty `{}` `feeder.json`. The bootstrapper deliberately always wrote the file, even as `{}` when every feeder key was at its bundled default — but `milestone-feeder`'s `plan` only auto-invokes `milestone-feeder:setup` when `feeder.json` is **ABSENT**. A present `{}` therefore silently defeated first-run setup (no label alignment, no key confirmation). The writer now leaves the file absent when the assembled object would be `{}`, so an all-default freshly-bootstrapped repo correctly triggers setup on its first `plan`.
+**Theme:** The scaffolded `.project/` docs and `.milestone-config/` profiles now capture more of a project as first-class, structured, citable facts — a config & secrets catalog, deployment targets, and versioning that actually reaches the feeder — while the config writers stop drifting from the driver/feeder schemas and front-end detection covers the mainstream JS frameworks.
+
+### ✨ Features / enhancements
+
+| Issue | PR | What |
+|---|---|---|
+| #76 Structured config & secrets catalog in `.project/` | #87 | New `project-docs/templates/config-catalog.md` — a `.env.example`-style **norms-only** doc (7 fixed `##` anchors: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs; recorded as key · source bucket · format · env · required?, **never values**) + a Tier 8 "Configuration & secrets" interview pass that cues the four common holes (local-dev DB engine, full JWT key set, complete CORS origins, sender/from address). In-repo only; consumers ground on it via existing generic `.project/#anchor` resolution. |
+| #78 Deployment targets as a first-class fact | #84 | New fixed `## Deployment targets` anchor in the `environment.md` template + a Tier-4 interview question, so the deploy target (Cloudflare/AWS/Azure/Vercel/…) is a structured, citable fact instead of free-text hosting prose. Records, does not provision; `## Runtime & hosting` left intact. |
+| #80 Driver-config writer emits `nonNegotiables` | #89 | The driver-config writer (both `.sh`/`.ps1` twins) now emits the optional `nonNegotiables` key (`string[]`), routed through the full lifecycle (`plan` → `apply` → `update` union), closing the real drift vs a `driver:setup`-provisioned profile. Keep-and-widen — delegating to the interactive setup skills is infeasible from non-interactive `apply`; `versioning` stays boolean, `implementerAgent` stays default-filled. |
+| #81 Detect React / Vue / Svelte / Next front-end stacks | #86 | `detect-stack` (both twins) now discriminates Angular → Next → React → Vue → Svelte → generic (most-specific-first, one finding per `package.json`, Next before React) instead of collapsing every non-Angular JS stack to "Node (generic)". Strengthens the grounding digest the feeder architect relies on. |
 
 ### 🐛 Fixes
 
 | Issue | PR | What |
 |---|---|---|
-| #77 Bootstrapper emits empty `{}` feeder.json, defeating milestone-feeder's first-run setup | this PR | `write-feeder-config` (both twins) now short-circuits when the assembled object is empty — `[ "$NEW_CONTENT" = "{}" ]` (bash) / `$obj.Count -eq 0` (pwsh) — printing a "leaving … absent" message and exiting 0 **without writing** rather than emitting `{}`. Non-destructive: an all-default run never writes AND never deletes an existing file (stale-`{}` remediation is out of scope). Any run that resolves a non-default key (`--reviewer internal`/`false`, non-default `--project-docs`) still writes a present file, unchanged. Header/docstring invariant reconciled in lockstep across both twins (Behavior, schema-guardrail, "what this does", exit-code contract, assembly comment), plus `skills/apply/SKILL.md`, `skills/update/SKILL.md` (doc-only — `update`'s union logic is unchanged), and `SPEC.md §6.1`. This repo's own committed `{}` `.milestone-config/feeder.json` is removed so the repo dogfoods the new behavior. |
+| #77 Empty `{}` `feeder.json` defeated first-run setup | #83 | `write-feeder-config` (both twins) now short-circuits when the assembled object is empty — leaving `feeder.json` **absent** instead of writing `{}` — so an all-default freshly-bootstrapped repo correctly triggers `milestone-feeder:setup` (label alignment + key confirmation) on its first `plan`. Non-destructive (never writes AND never deletes); a run resolving any non-default key still writes a present file. This repo's own committed `{}` removed to dogfood the fix. Supersedes the v0.2.1 `#54` note. |
+| #79 Versioning answer never reached the feeder | #88 | The Tier-6 versioning answer is now **dual-written**: the driver keeps `driver.json#versioning` (boolean, for its bump/extraction) AND the feeder writer emits `feeder.json#versioning` as `"semver"`/`"none"` (omitted when unanswered → feeder infers-or-asks). Routed through `plan`/`apply` with the `{driver boolean, feeder string}` mapping; the pre-existing `<semver \| false>` doc drift corrected (the driver key is boolean-only). |
+| #75 Dead `allowCrossMarketplaceDependenciesOn` in `marketplace.json` | #82 | Removed the now-dead `allowCrossMarketplaceDependenciesOn` key — it permitted a cross-marketplace dependency the plugin no longer declares. JSON stays valid; `plugin.json` still declares no `dependencies`. Dead-config cleanup, no functional change. |
 
 ### Consumer notes (upgrading from v0.3.1)
 
-- **The writer no longer emits an empty `{}` `feeder.json`.** A freshly-bootstrapped repo whose feeder keys are all at their bundled defaults now gets **NO** `feeder.json`, so its first `milestone-feeder:plan` correctly triggers `setup` (label alignment + key confirmation) instead of being silently skipped by a present `{}`.
-- **Already-bootstrapped repos carrying a stale `{}` are NOT auto-remediated** by this change — discovery/remediation of pre-existing `{}` artifacts is deliberately out of scope (issue #77). If your repo carries a stale `{}` `feeder.json` and you want first-run setup to fire, delete it manually.
-- **A run that resolves any non-default feeder key still writes a present file, unchanged** — only the all-default case changed.
-- **Supersedes the v0.2.1 `#54` note** ("`feeder.json` is now `{}` — the exact output `scripts/write-feeder-config.sh` emits for this repo"): the writer no longer emits `{}`, and this repo's own all-default `feeder.json` is now left **absent** (the committed `{}` is removed).
+- **`feeder.json` is no longer emitted empty.** An all-default freshly-bootstrapped repo now gets **no** `feeder.json`, so its first `milestone-feeder:plan` triggers `setup`. Already-bootstrapped repos carrying a stale `{}` are **not** auto-remediated — delete a stale `{}` manually if you want first-run setup to fire. (Supersedes the v0.2.1 `#54` note that `feeder.json` is emitted as `{}`.)
+- **Versioning now reaches the feeder.** The bootstrapper dual-writes `feeder.json#versioning` (`"semver"`/`"none"`) alongside the driver's boolean, so "answer once → milestone-feeder names milestones as versions" holds.
+- **New `.project/` outputs.** A bootstrap run now scaffolds `config-catalog.md` (config/secrets norms) and a `## Deployment targets` anchor in `environment.md`; downstream agents can cite `.project/config-catalog.md#<section>` and the deployment-targets anchor as grounding. Existing repos pick these up via the future `refresh`/`update` reconcile, not automatically.
+- **Wider stack detection.** `detect-stack` now recognizes React/Vue/Svelte/Next (previously Angular/MAUI-only).
+- **Additive schema/output changes only:** new `feeder.json#versioning` key, the driver writer now emits `nonNegotiables`, and two new `.project/` template artifacts. No existing key changed shape or default, and no plan-file contract broke.
 
 ### ⚖️ Post-run audit trail
 
-Judgment-call PRs for this release: this PR removes this repo's committed `{}` `.milestone-config/feeder.json` (the exact stale artifact the fix targets, per the v0.2.1 `#54` coupling) so the repo dogfoods the new absent-when-empty behavior. `driver.json` is untouched.
+Judgment-call PRs for this release: **#83** (removed this repo's committed `{}` `feeder.json` dogfood artifact), **#84** (`.project/` existing-repo reconciliation deferred to future `refresh`), **#86** (also edited the `plan` stack lookup table), **#87** (config-catalog `.project/` deferral), **#88** (dropped the non-producible `"versioning":"semver"` from this repo's `driver.json` + fixed `conventions.md` grounding), **#89** (in-scope widening of `update` to round-trip `nonNegotiables`). Review before the `develop → main` release.
 
 ## v0.3.1 — slash commands register in Claude Desktop
 
