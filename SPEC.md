@@ -259,7 +259,9 @@ changed), never `human-owned`.
 | `driver.json#unitTestCmd` / `preflightCmd` | Detected test / preflight commands. | stack detection |
 | `driver.json#e2eEnv` | E2E environment keys (or `none`). | environment capture |
 | `driver.json#domainSkills` | Stack-specific skills wired from the best-practice capture (§5) — so the implementer cites idioms ([BRIEF.md:35,47](BRIEF.md)). | stack capture |
-| `driver.json#versioning` | The versioning policy (`semver` \| `false`/none) from the interview ([BRIEF.md:38,47](BRIEF.md)). | versioning policy |
+| `driver.json#nonNegotiables` | Hard constraints the implementer must honour (framework versions, platform targets). | stack capture |
+| `driver.json#versioning` | The versioning policy as a **boolean** (the driver schema is boolean; the writer emits only `false`): `false` = version-free; **omitted** = versioned ([BRIEF.md:38,47](BRIEF.md)). Sourced from the Tier-6 answer. | versioning policy |
+| `feeder.json#versioning` | The versioning policy as the feeder's **string enum** `"semver"` \| `"none"` — the feeder's read-contract key (`milestone-feeder/docs/profile-schema.md:52`). Sourced from the SAME Tier-6 answer (dual-write): versioned → `"semver"`, non-versioned → `"none"`; **omitted when the Tier-6 answer was skipped** (no bundled default — absent = infer-or-ask). | versioning policy |
 | `driver.json#stack` | The runtime family the emitter scaffolds setup for — one of `node` \| `python` \| `dotnet` \| `maui` \| `rust` \| `plugin` \| `none`. Omitted when `none` (no scaffold). | stack detection |
 | `driver.json#stackVersionFile` | The detected version-file path (e.g. `.nvmrc`, `.python-version`, `global.json`), when one resolved. | stack detection |
 | `feeder.json#projectDocs` | The project-docs location, when non-default. | §4.1 target path |
@@ -268,6 +270,13 @@ changed), never `human-owned`.
 Defaults are **omitted** (a key at its default is not written — the configs stay
 minimal). An entry is recorded only when the captured value diverges from the consumer
 tool's default.
+
+> **Feeder slice — an all-default object is left ABSENT, not written as `{}`.** For the
+> FEEDER slice, when every key is at its default the assembled object is empty and the
+> bootstrapper leaves `feeder.json` **ABSENT** (it does **not** emit `{}`), so
+> `milestone-feeder`'s absent-only first-run `setup` fires (issue #77). The DRIVER slice
+> always carries its ≥3 required Core keys (`integrationBranch`, `protectedBranch`,
+> `sourceGlobs`) and is always written, so this never applies to `driver.json`.
 
 > **`appRoots` adds NO consumed-config key.** The app-root prefixing (§4.1) is baked
 > into the `sourceGlobs` / `uiSurfaceGlobs` **values** at scaffold time, so the persisted
@@ -352,7 +361,8 @@ this Markdown layout is one faithful rendering of them.
 | Key | State | Reconcile | Value |
 |-----|-------|-----------|-------|
 | driver.json#domainSkills | captured | add   | ["<stack-skill>"] |
-| driver.json#versioning   | captured | patch | semver |
+| driver.json#versioning   | captured | patch | false |   # BOOLEAN-only: `false` = version-free; omitted = versioned
+| feeder.json#versioning   | captured | add   | "none" |   # string enum "semver"|"none" — same Tier-6 answer, dual-write
 | driver.json#sourceGlobs  | captured | patch | ["src/**", "tests/**"] |   # root-absolute; ["."] no-op. Nested: ["siteroot/web/**","siteroot/api/**"] |
 
 ### Version-file / bump target

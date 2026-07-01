@@ -61,10 +61,11 @@ Run the understanding interview exactly as `docs/understanding-interview.md` def
 | 1 · Goal & vision | What the project is for; what it optimizes for | `design-philosophy.md` |
 | 2 · Architecture | Architectural stance, layering, boundaries | `design-philosophy.md` |
 | 3 · Technology stack | Language + version, framework, SQL flavor + ORM, major libraries | `library-manifest.md` + `environment.md` |
-| 4 · Environment model | Data stores + test-data isolation, caching, async/messaging, external services | `environment.md` |
+| 4 · Environment model | Data stores + test-data isolation, caching, async/messaging, external services, deployment targets | `environment.md` |
 | 5 · Mandated packages | Libraries/tooling required by purpose (distinct from detection) | `library-manifest.md` |
 | 6 · Versioning policy | SemVer y/n, version-file location, bump cadence | `conventions.md` |
 | 7 · Design system *(UI projects only)* | Tokens, components, layout, required states, a11y, voice | `design-system.md` + `tokens.json` |
+| 8 · Configuration & secrets | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, never values | `config-catalog.md` |
 
 Honor the engine's recording discipline (`docs/understanding-interview.md` §1, §3) verbatim:
 
@@ -114,6 +115,10 @@ The detector emits TSV per run: a header then one finding per stack — columns 
   |---|---|
   | `Node (generic)` | `node` |
   | `Angular (Node)` | `node` |
+  | `Next.js (Node)` | `node` |
+  | `React (Node)` | `node` |
+  | `Vue (Node)` | `node` |
+  | `Svelte (Node)` | `node` |
   | `Node ([TBD])` (malformed package.json) | `node` |
   | `Python (<framework>)` (e.g. `Python (FastAPI)`, `Python (Django)`, `Python (Flask)`) | `python` |
   | `Python` (framework unresolved, flagged) | `python` |
@@ -173,7 +178,12 @@ Because normalization runs **before** the no-op test, every spelling of "the rep
 
 | Sub-section | Entries recorded | Source |
 |---|---|---|
-| Configs (`driver.json` / `feeder.json` non-default keys) | `integrationBranch` / `protectedBranch` (branch model), `sourceGlobs`, `uiSurfaceGlobs` (or `none`) — **recorded root-absolute, app-root-prefixed per the baking rule above**, `unitTestCmd` / `preflightCmd` (detected), `e2eEnv` (or `none`), **`domainSkills`** (the deduped **union** across app-roots, from the §2 per-root detection / §A best-practice capture), **`stack`** (the resolved enum mapped from the §2 detection per the table above) and **`stackVersionFile`** (the version-file PATH from the §2 `versionFile` column — omitted when empty), **`versioning`** (from Tier 6), `feeder.json#projectDocs` / `reviewer` when non-default. Configs are machine-owned → reconcile class `add` (key absent) or `patch` (value changed), never `human-owned` (`SPEC.md` §6.1). **No `appRoots` key is written** — it is a plan-file-only field (`SPEC.md` §4.1, §6.1). | Steps 1–2 × `appRoots` |
+| Configs (`driver.json` / `feeder.json` non-default keys) | `integrationBranch` / `protectedBranch` (branch model), `sourceGlobs`, `uiSurfaceGlobs` (or `none`) — **recorded root-absolute, app-root-prefixed per the baking rule above**, `unitTestCmd` / `preflightCmd` (detected), `e2eEnv` (or `none`), **`domainSkills`** (the deduped **union** across app-roots, from the §2 per-root detection / §A best-practice capture), **`nonNegotiables`** (the hard-constraint capture — the deduped **union** across app-roots, same provenance as `domainSkills`: the §2 per-root detection / §A best-practice capture), **`stack`** (the resolved enum mapped from the §2 detection per the table above) and **`stackVersionFile`** (the version-file PATH from the §2 `versionFile` column — omitted when empty), **`versioning`** (from Tier 6 — **DUAL-WRITE**: the SINGLE Tier-6 answer maps to BOTH the boolean `driver.json#versioning` AND the string-enum `feeder.json#versioning`, per the mapping below), `feeder.json#projectDocs` / `reviewer` when non-default. Configs are machine-owned → reconcile class `add` (key absent) or `patch` (value changed), never `human-owned` (`SPEC.md` §6.1). **No `appRoots` key is written** — it is a plan-file-only field (`SPEC.md` §4.1, §6.1). | Steps 1–2 × `appRoots` |
+
+> **Tier-6 versioning is a DUAL-WRITE — one answer, two keys.** The single Tier-6 versioning answer routes to BOTH config keys, which have DISTINCT types and consumers: the driver's `driver.json#versioning` is **boolean** (consumed by the driver's version-bump/extraction; the writer emits only `false`), while the feeder's `feeder.json#versioning` is the **string enum** `"semver"|"none"` (the feeder's read-contract key, `milestone-feeder/docs/profile-schema.md:52`). The mapping:
+> - **versioned** → `driver.json#versioning` OMITTED (driver default is versioned) / `feeder.json#versioning: "semver"`.
+> - **non-versioned** → `driver.json#versioning: false` / `feeder.json#versioning: "none"`.
+> - **skipped / [TBD]** → OMIT `versioning` from feeder.json (the feeder infers-or-asks) AND keep the driver key's existing unset-sentinel behavior — **never a placeholder in either file**.
 | Version-file / bump target | One entry for *where* the version lives. `captured` (`.claude-plugin/plugin.json`) for a plugin repo; `none` for a `versioning: none` project; **`[TBD]` 🔴 when the repo is non-plugin and no version file resolved** — the recorded brief caveat (the driver's bump target is `.claude-plugin/plugin.json` today; a non-plugin version file may need it generalized — [BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2), carried explicitly rather than silently dropped. | Tier 6 |
 | Label taxonomy | One create-if-missing entry per label — the driver's (`needs design`, `needs decision`, `blocked`, `needs review`, `judgment call`, `in progress`) and the feeder's (`ui`, `logic`, `risk:light`, `risk:heavy`). Identified by name; reconcile class `add` (`SPEC.md` §6.3). | fixed taxonomy |
 | Branch model | One entry per branch (integration, protected) to create-if-missing + the default-branch policy. By name; `add`; never delete (`SPEC.md` §6.3). | branch model |
@@ -223,7 +233,9 @@ Write the file in the **`SPEC.md` §8 shape** — the fields (§4) are the contr
 |-----|-------|-----------|-------|
 | driver.json#integrationBranch | captured | add   | <branch>            # recorded only when non-default
 | driver.json#domainSkills      | captured | add   | <from detection / best-practice capture>
-| driver.json#versioning        | captured | patch | <semver | false>
+| driver.json#nonNegotiables    | captured | add   | <hard-constraint capture; string[]>   # same provenance as domainSkills
+| driver.json#versioning        | captured | patch | boolean — `false` = version-free; omitted = versioned   # driver key is BOOLEAN-only (writer emits only `false`)
+| feeder.json#versioning        | captured | add   | `"semver"` \| `"none"`   # Tier-6 routing → the feeder's string-enum read-contract key
 | driver.json#sourceGlobs       | captured | patch | <root-absolute globs>   # baked from appRoots; ["."] no-op → e.g. ["skills/**"]; nested → ["siteroot/web/**","siteroot/api/**"]
 | feeder.json#projectDocs       | captured | add   | <path>              # only when non-default
 

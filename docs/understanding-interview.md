@@ -52,10 +52,11 @@ load-bearing rule, not the source of the default.
 | **1 · Goal & vision** | What the project is for; what it optimizes for. | `design-philosophy.md` |
 | **2 · Architecture** | Architectural stance, layering, boundaries. | `design-philosophy.md` |
 | **3 · Technology stack** | Language + version, framework, SQL flavor + ORM, major libraries. | `library-manifest.md` + `environment.md` |
-| **4 · Environment model** | Data stores + test-data isolation, caching, async/messaging, external services. | `environment.md` |
+| **4 · Environment model** | Data stores + test-data isolation, caching, async/messaging, external services, deployment targets. | `environment.md` |
 | **5 · Mandated packages** | Libraries/tooling required by purpose (distinct from what detection finds). | `library-manifest.md` |
 | **6 · Versioning policy** | SemVer yes/no, version-file location, bump cadence. | `conventions.md` |
 | **7 · Design system** *(UI projects only)* | Tokens, components, layout, required states, a11y, voice. | `design-system.md` + `tokens.json` |
+| **8 · Configuration & secrets** | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, **never values**. | `config-catalog.md` |
 
 Skip Tier 7 entirely for a repo with no UI surface — an all-`[TBD]`
 `design-system.md` is the correct "no design-lens grounding" signal
@@ -72,10 +73,10 @@ records each captured field under the stable anchor named here. Each anchor was
 read from `project-docs/templates/` and is a citation target — never rename one
 (§3).
 
-The five doc templates expose **28** `##` anchors total
-(`design-philosophy.md` 6 · `library-manifest.md` 4 · `environment.md` 6 ·
-`conventions.md` 6 · `design-system.md` 6). Every anchor below appears exactly
-once.
+The six doc templates expose **36** `##` anchors total
+(`design-philosophy.md` 6 · `library-manifest.md` 4 · `environment.md` 7 ·
+`conventions.md` 6 · `design-system.md` 6 · `config-catalog.md` 7). Every anchor
+below appears exactly once.
 
 ### `design-philosophy.md` (6 anchors) — Tiers 1-2
 
@@ -97,7 +98,7 @@ once.
 | Mandated packages: where dependency proposals go (the PAUSE gate) | `## Adding a dependency (the gate)` |
 | Mandated packages: libraries explicitly not to use, and why | `## Avoid / banned` |
 
-### `environment.md` (6 anchors) — Tiers 3-4
+### `environment.md` (7 anchors) — Tiers 3-4
 
 | Capture field | `##` anchor |
 |---|---|
@@ -107,6 +108,7 @@ once.
 | Environment: background jobs / queues / streams, or "none" | `## Async & messaging` |
 | Environment: third-party services (auth, payments, email, storage, APIs) | `## External services & integrations` |
 | Stack/environment: where it runs, runtime/version targets | `## Runtime & hosting` |
+| Environment: where the app deploys — hosting vendor/platform/target (record, don't provision) | `## Deployment targets` |
 
 ### `conventions.md` (6 anchors) — Tier 6 (+ stack-derived conventions)
 
@@ -133,6 +135,18 @@ once.
 `tokens.json` is the machine-readable companion to `## Design tokens`: record
 real values over its `[TBD]` cells with the same discipline; an untouched `[TBD]`
 token reads as unspecified (file header comment).
+
+### `config-catalog.md` (7 anchors) — Tier 8
+
+| Capture field | `##` anchor |
+|---|---|
+| Config: DB/service connection strings **incl. the local-dev DB engine** (LocalDB / Docker SQL / dev cloud) — the F5-dev target is the most-missed | `## Connection strings` |
+| Config: auth/JWT key set — the **full set (Key · Issuer · Audience)**, not only the signing key | `## Auth / JWT` |
+| Config: third-party API keys (payments, storage, external APIs) — key name + source bucket, never the value | `## Third-party API keys` |
+| Config: notification targets **incl. the sender/from address**, not only the recipient | `## Notification targets` |
+| Config: the **complete** CORS origin list across environments (localhost + apex + www + api) | `## CORS origins` |
+| Config: per-environment app config (`apiUrl`, feature flags, etc.) | `## App config (per-environment)` |
+| Config: build outputs / publish dirs / artifact paths | `## Build outputs` |
 
 > **Best-practice adherence is load-bearing** ([BRIEF.md:35](../BRIEF.md)).
 > Capturing a framework name is not enough — record the conventions that *follow*
