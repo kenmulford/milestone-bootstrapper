@@ -61,7 +61,7 @@ Run the understanding interview exactly as `docs/understanding-interview.md` def
 | 1 · Goal & vision | What the project is for; what it optimizes for | `design-philosophy.md` |
 | 2 · Architecture | Architectural stance, layering, boundaries | `design-philosophy.md` |
 | 3 · Technology stack | Language + version, framework, SQL flavor + ORM, major libraries | `library-manifest.md` + `environment.md` |
-| 4 · Environment model | Data stores + test-data isolation, caching, async/messaging, external services | `environment.md` |
+| 4 · Environment model | Data stores + test-data isolation, caching, async/messaging, external services, deployment targets | `environment.md` |
 | 5 · Mandated packages | Libraries/tooling required by purpose (distinct from detection) | `library-manifest.md` |
 | 6 · Versioning policy | SemVer y/n, version-file location, bump cadence | `conventions.md` |
 | 7 · Design system *(UI projects only)* | Tokens, components, layout, required states, a11y, voice | `design-system.md` + `tokens.json` |

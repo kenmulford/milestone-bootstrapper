@@ -52,7 +52,7 @@ load-bearing rule, not the source of the default.
 | **1 · Goal & vision** | What the project is for; what it optimizes for. | `design-philosophy.md` |
 | **2 · Architecture** | Architectural stance, layering, boundaries. | `design-philosophy.md` |
 | **3 · Technology stack** | Language + version, framework, SQL flavor + ORM, major libraries. | `library-manifest.md` + `environment.md` |
-| **4 · Environment model** | Data stores + test-data isolation, caching, async/messaging, external services. | `environment.md` |
+| **4 · Environment model** | Data stores + test-data isolation, caching, async/messaging, external services, deployment targets. | `environment.md` |
 | **5 · Mandated packages** | Libraries/tooling required by purpose (distinct from what detection finds). | `library-manifest.md` |
 | **6 · Versioning policy** | SemVer yes/no, version-file location, bump cadence. | `conventions.md` |
 | **7 · Design system** *(UI projects only)* | Tokens, components, layout, required states, a11y, voice. | `design-system.md` + `tokens.json` |
@@ -72,8 +72,8 @@ records each captured field under the stable anchor named here. Each anchor was
 read from `project-docs/templates/` and is a citation target — never rename one
 (§3).
 
-The five doc templates expose **28** `##` anchors total
-(`design-philosophy.md` 6 · `library-manifest.md` 4 · `environment.md` 6 ·
+The five doc templates expose **29** `##` anchors total
+(`design-philosophy.md` 6 · `library-manifest.md` 4 · `environment.md` 7 ·
 `conventions.md` 6 · `design-system.md` 6). Every anchor below appears exactly
 once.
 
@@ -97,7 +97,7 @@ once.
 | Mandated packages: where dependency proposals go (the PAUSE gate) | `## Adding a dependency (the gate)` |
 | Mandated packages: libraries explicitly not to use, and why | `## Avoid / banned` |
 
-### `environment.md` (6 anchors) — Tiers 3-4
+### `environment.md` (7 anchors) — Tiers 3-4
 
 | Capture field | `##` anchor |
 |---|---|
@@ -107,6 +107,7 @@ once.
 | Environment: background jobs / queues / streams, or "none" | `## Async & messaging` |
 | Environment: third-party services (auth, payments, email, storage, APIs) | `## External services & integrations` |
 | Stack/environment: where it runs, runtime/version targets | `## Runtime & hosting` |
+| Environment: where the app deploys — hosting vendor/platform/target (record, don't provision) | `## Deployment targets` |
 
 ### `conventions.md` (6 anchors) — Tier 6 (+ stack-derived conventions)
 

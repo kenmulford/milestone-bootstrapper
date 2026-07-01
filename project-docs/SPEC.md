@@ -80,7 +80,7 @@ Full content in [`templates/`](templates/). Stable section sets:
 - **design-system.md** — Design tokens · Component inventory · Layout & responsive rules · Required states · Accessibility baseline · Voice & microcopy
 - **library-manifest.md** — Runtime & frameworks · Approved libraries (by purpose) · Adding a dependency (the gate) · Avoid / banned
 - **conventions.md** — Naming · File & folder layout · Test patterns · Canonical exemplars · Commits & PRs
-- **environment.md** — Environments · Data stores (+ test-DB isolation) · Caching · Async & messaging · External services · Runtime & hosting
+- **environment.md** — Environments · Data stores (+ test-DB isolation) · Caching · Async & messaging · External services · Runtime & hosting · Deployment targets
 
 ---
 

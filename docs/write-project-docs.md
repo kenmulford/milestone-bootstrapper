@@ -75,7 +75,7 @@ above — read them, do not re-derive from this summary):
 |---|---|---|
 | Goal & vision; architectural stance, layering, priorities, one-way doors, error & testing philosophy | `design-philosophy.md` | `Architectural stance` · `Layering & boundaries` · `What we optimize for` · `One-way doors` · `Error & failure philosophy` · `Testing philosophy` |
 | Language + version, framework, SQL + ORM, major libraries, mandated packages | `library-manifest.md` | `Runtime & frameworks` · `Approved libraries (by purpose)` · `Adding a dependency (the gate)` · `Avoid / banned` |
-| Data stores + test-data isolation, caching, async/messaging, external services, runtime/hosting | `environment.md` | `Environments` · `Data stores` · `Caching` · `Async & messaging` · `External services & integrations` · `Runtime & hosting` |
+| Data stores + test-data isolation, caching, async/messaging, external services, runtime/hosting, deployment targets | `environment.md` | `Environments` · `Data stores` · `Caching` · `Async & messaging` · `External services & integrations` · `Runtime & hosting` · `Deployment targets` |
 | Stack best-practice conventions + versioning policy | `conventions.md` | `Naming` · `File & folder layout` · `Test patterns` · `Canonical exemplars (mirror these)` · `Commits & PRs` · `Versioning` |
 | Design tokens/components/layout/states (**UI projects only**) | `design-system.md` + `tokens.json` | `Design tokens` · `Component inventory` · `Layout & responsive rules` · `Required states` · `Accessibility baseline` · `Voice & microcopy` |
 
