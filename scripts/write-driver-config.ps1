@@ -34,7 +34,7 @@
 #                                (profile-schema.md:68, 87, 144)
 #   This slice writes ONLY the keys the approved plan supplies (see Inputs). It
 #   does NOT emit speculative keys (triageAgent, designReviewAgent, e2eTestCmd,
-#   integrationGranularity, nonNegotiables, integrations.trello) — they are not
+#   integrationGranularity, integrations.trello) — they are not
 #   in this writer's plan-driven input set. If the driver schema gains or renames
 #   a key this writer emits, update this script in lockstep.
 #
@@ -75,6 +75,8 @@
 #                               the bundled default — the omit test is against the
 #                               BUNDLED default, mirroring write-feeder-config).
 #     -DomainSkills      <json> JSON string[]  (#3 stack->domainSkills)
+#     -NonNegotiables    <json> JSON string[]  hard constraints the implementer
+#                               must honour (framework versions, platform targets).
 #     -UiSurfaceGlobs    <json> JSON string[]
 #     -UnitTestCmd       <str>
 #     -PreflightCmd      <str>
@@ -93,9 +95,9 @@
 #                               passed — never written as null/empty.
 #   Env fallbacks (params win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
-#     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
-#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING, DRIVER_STACK,
-#     DRIVER_STACK_VERSION_FILE.
+#     DRIVER_DOMAIN_SKILLS, DRIVER_NON_NEGOTIABLES, DRIVER_UI_SURFACE_GLOBS,
+#     DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING,
+#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -125,6 +127,7 @@ param(
     [string]$SourceGlobs,
     [string]$ProjectDocs,
     [string]$DomainSkills,
+    [string]$NonNegotiables,
     [string]$UiSurfaceGlobs,
     [string]$UnitTestCmd,
     [string]$PreflightCmd,
@@ -174,6 +177,7 @@ if (-not $bound.ContainsKey('ProjectDocs')) {
 
 # Optional keys: track supplied-ness so unset => OMIT, passed-empty => bad input.
 $domainSkillsIn   = if ($bound.ContainsKey('DomainSkills'))   { @{ Supplied = $true; Value = $DomainSkills } }   elseif ($null -ne $env:DRIVER_DOMAIN_SKILLS   -and $env:DRIVER_DOMAIN_SKILLS   -ne '') { @{ Supplied = $true; Value = $env:DRIVER_DOMAIN_SKILLS } }   else { @{ Supplied = $false } }
+$nonNegotiablesIn = if ($bound.ContainsKey('NonNegotiables')) { @{ Supplied = $true; Value = $NonNegotiables } } elseif ($null -ne $env:DRIVER_NON_NEGOTIABLES -and $env:DRIVER_NON_NEGOTIABLES -ne '') { @{ Supplied = $true; Value = $env:DRIVER_NON_NEGOTIABLES } } else { @{ Supplied = $false } }
 $uiSurfaceGlobsIn = if ($bound.ContainsKey('UiSurfaceGlobs')) { @{ Supplied = $true; Value = $UiSurfaceGlobs } } elseif ($null -ne $env:DRIVER_UI_SURFACE_GLOBS -and $env:DRIVER_UI_SURFACE_GLOBS -ne '') { @{ Supplied = $true; Value = $env:DRIVER_UI_SURFACE_GLOBS } } else { @{ Supplied = $false } }
 $unitTestCmdIn    = if ($bound.ContainsKey('UnitTestCmd'))    { @{ Supplied = $true; Value = $UnitTestCmd } }    elseif ($null -ne $env:DRIVER_UNIT_TEST_CMD   -and $env:DRIVER_UNIT_TEST_CMD   -ne '') { @{ Supplied = $true; Value = $env:DRIVER_UNIT_TEST_CMD } }    else { @{ Supplied = $false } }
 $preflightCmdIn   = if ($bound.ContainsKey('PreflightCmd'))   { @{ Supplied = $true; Value = $PreflightCmd } }   elseif ($null -ne $env:DRIVER_PREFLIGHT_CMD   -and $env:DRIVER_PREFLIGHT_CMD   -ne '') { @{ Supplied = $true; Value = $env:DRIVER_PREFLIGHT_CMD } }   else { @{ Supplied = $false } }
@@ -253,6 +257,7 @@ function ConvertFrom-JsonObject {
 
 $sourceGlobsVal = ConvertFrom-JsonArray '-SourceGlobs' $SourceGlobs
 $domainSkillsVal   = if ($domainSkillsIn.Supplied)   { ConvertFrom-JsonArray  '-DomainSkills'    $domainSkillsIn.Value }   else { $null }
+$nonNegotiablesVal = if ($nonNegotiablesIn.Supplied) { ConvertFrom-JsonArray  '-NonNegotiables'  $nonNegotiablesIn.Value } else { $null }
 $uiSurfaceGlobsVal = if ($uiSurfaceGlobsIn.Supplied) { ConvertFrom-JsonArray  '-UiSurfaceGlobs'  $uiSurfaceGlobsIn.Value } else { $null }
 $e2eEnvVal         = if ($e2eEnvIn.Supplied)         { ConvertFrom-JsonObject '-E2eEnv'          $e2eEnvIn.Value }        else { $null }
 
@@ -315,6 +320,10 @@ if ($writeVersioningFalse)      { $obj['versioning'] = $false }
 if ($unitTestCmdIn.Supplied)    { $obj['unitTestCmd'] = $unitTestCmdIn.Value }
 if ($preflightCmdIn.Supplied)   { $obj['preflightCmd'] = $preflightCmdIn.Value }
 if ($domainSkillsIn.Supplied)   { $obj['domainSkills'] = $domainSkillsVal }
+# nonNegotiables sits immediately after domainSkills so the two Enrichment array
+# keys stay adjacent (schema relative order; profile-schema.md:117). Same slot as
+# the .sh twin so output stays byte-identical.
+if ($nonNegotiablesIn.Supplied) { $obj['nonNegotiables'] = $nonNegotiablesVal }
 if ($e2eEnvIn.Supplied)         { $obj['e2eEnv'] = $e2eEnvVal }
 # stack / stackVersionFile: additive keys shipping ahead of the canonical schema
 # (see GUARDRAIL EXEMPTION above). stack written only for a non-`none` enum member;
