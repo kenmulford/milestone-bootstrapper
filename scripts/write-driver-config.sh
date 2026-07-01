@@ -34,7 +34,7 @@
 #                                (profile-schema.md:68, 87, 144)
 #   This slice writes ONLY the keys the approved plan supplies (see Inputs). It
 #   does NOT emit speculative keys (triageAgent, designReviewAgent, e2eTestCmd,
-#   integrationGranularity, nonNegotiables, integrations.trello) — they are not
+#   integrationGranularity, integrations.trello) — they are not
 #   in this writer's plan-driven input set. If the driver schema gains or renames
 #   a key this writer emits, update this script in lockstep.
 #
@@ -75,6 +75,8 @@
 #                                 the bundled default — the omit test is against
 #                                 the BUNDLED default, mirroring write-feeder-config).
 #     --domain-skills      <json> JSON string[]  (#3 stack->domainSkills)
+#     --non-negotiables    <json> JSON string[]  hard constraints the implementer
+#                                 must honour (framework versions, platform targets).
 #     --ui-surface-globs   <json> JSON string[]
 #     --unit-test-cmd      <str>
 #     --preflight-cmd      <str>
@@ -93,9 +95,9 @@
 #                                 passed — never written as null/empty.
 #   Env fallbacks (args win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
-#     DRIVER_DOMAIN_SKILLS, DRIVER_UI_SURFACE_GLOBS, DRIVER_UNIT_TEST_CMD,
-#     DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING, DRIVER_STACK,
-#     DRIVER_STACK_VERSION_FILE.
+#     DRIVER_DOMAIN_SKILLS, DRIVER_NON_NEGOTIABLES, DRIVER_UI_SURFACE_GLOBS,
+#     DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING,
+#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -134,6 +136,7 @@ SOURCE_GLOBS="${DRIVER_SOURCE_GLOBS:-}"
 # filter assembly drops it when still equal to the default (write-feeder-config.sh:63).
 PROJECT_DOCS="${DRIVER_PROJECT_DOCS:-$DEFAULT_PROJECT_DOCS}"
 DOMAIN_SKILLS="${DRIVER_DOMAIN_SKILLS:-}"
+NON_NEGOTIABLES="${DRIVER_NON_NEGOTIABLES:-}"
 UI_SURFACE_GLOBS="${DRIVER_UI_SURFACE_GLOBS:-}"
 UNIT_TEST_CMD="${DRIVER_UNIT_TEST_CMD:-}"
 PREFLIGHT_CMD="${DRIVER_PREFLIGHT_CMD:-}"
@@ -150,6 +153,7 @@ UNSET=$'\x00UNSET\x00'
 [ -n "${DRIVER_UNIT_TEST_CMD+x}" ] || UNIT_TEST_CMD="$UNSET"
 [ -n "${DRIVER_PREFLIGHT_CMD+x}" ]  || PREFLIGHT_CMD="$UNSET"
 [ -n "${DRIVER_DOMAIN_SKILLS+x}" ]  || DOMAIN_SKILLS="$UNSET"
+[ -n "${DRIVER_NON_NEGOTIABLES+x}" ] || NON_NEGOTIABLES="$UNSET"
 [ -n "${DRIVER_UI_SURFACE_GLOBS+x}" ] || UI_SURFACE_GLOBS="$UNSET"
 [ -n "${DRIVER_E2E_ENV+x}" ]        || E2E_ENV="$UNSET"
 [ -n "${DRIVER_VERSIONING+x}" ]     || VERSIONING="$UNSET"
@@ -163,6 +167,7 @@ while [ "$#" -gt 0 ]; do
     --source-globs)       SOURCE_GLOBS="${2:?--source-globs needs a value}"; shift 2 ;;
     --project-docs)       PROJECT_DOCS="${2:?--project-docs needs a value}"; shift 2 ;;
     --domain-skills)      DOMAIN_SKILLS="${2:?--domain-skills needs a value}"; shift 2 ;;
+    --non-negotiables)    NON_NEGOTIABLES="${2:?--non-negotiables needs a value}"; shift 2 ;;
     --ui-surface-globs)   UI_SURFACE_GLOBS="${2:?--ui-surface-globs needs a value}"; shift 2 ;;
     --unit-test-cmd)      UNIT_TEST_CMD="${2?--unit-test-cmd needs a value}"; shift 2 ;;
     --preflight-cmd)      PREFLIGHT_CMD="${2?--preflight-cmd needs a value}"; shift 2 ;;
@@ -212,6 +217,7 @@ validate_json_object() { # $1=flag-name $2=value
 
 validate_json_array "--source-globs" "$SOURCE_GLOBS"
 [ "$DOMAIN_SKILLS" = "$UNSET" ]    || validate_json_array  "--domain-skills"    "$DOMAIN_SKILLS"
+[ "$NON_NEGOTIABLES" = "$UNSET" ]  || validate_json_array  "--non-negotiables"  "$NON_NEGOTIABLES"
 [ "$UI_SURFACE_GLOBS" = "$UNSET" ] || validate_json_array  "--ui-surface-globs" "$UI_SURFACE_GLOBS"
 [ "$E2E_ENV" = "$UNSET" ]          || validate_json_object "--e2e-env"          "$E2E_ENV"
 
@@ -282,6 +288,13 @@ fi
 if [ "$DOMAIN_SKILLS" != "$UNSET" ]; then
   filter="${filter} | .domainSkills = \$domainSkills"
   args+=(--argjson domainSkills "$DOMAIN_SKILLS")
+fi
+# nonNegotiables sits immediately after domainSkills so the two Enrichment array
+# keys stay adjacent (schema relative order; profile-schema.md:117). Same slot in
+# the .ps1 twin so output stays byte-identical.
+if [ "$NON_NEGOTIABLES" != "$UNSET" ]; then
+  filter="${filter} | .nonNegotiables = \$nonNegotiables"
+  args+=(--argjson nonNegotiables "$NON_NEGOTIABLES")
 fi
 if [ "$E2E_ENV" != "$UNSET" ]; then
   # Canonicalize e2eEnv key order so output is byte-identical to the pwsh twin on
