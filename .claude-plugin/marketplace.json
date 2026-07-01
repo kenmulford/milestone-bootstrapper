@@ -8,7 +8,6 @@
   "metadata": {
     "description": "Bootstrapper for Claude Code — populate a repository's .project/ house docs from canonical templates and make the repo suite-ready for milestone-feeder and milestone-driver."
   },
-  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
   "plugins": [
     {
       "source": "./",
