@@ -33,6 +33,46 @@ Or install just this plugin from its own marketplace — still supported:
 /plugin install milestone-bootstrapper@milestone-bootstrapper
 ```
 
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 900}} }%%
+flowchart TD
+    brain(["the project brain — .project/ docs + .milestone-config/ — read by feeder, driver &amp; coherence-reviewer"])
+
+    input[/"your repo — plus a<br/>short interview"/]
+
+    subgraph loop [capture how your project is built — run once, revisit when it changes]
+        direction TB
+        subgraph sgP [plan — interview → reviewable preview]
+            direction LR
+            p1["interviews you — goal,<br/>stack, conventions"] --> p2["inspects the repo,<br/>detects the stack"] --> p3["previews everything it<br/>would write (writes nothing)"]
+        end
+        subgraph sgA [apply — writes it all]
+            direction LR
+            a1[".project/ docs — conventions,<br/>architecture, decisions"] --> a2[".milestone-config/ —<br/>driver.json + feeder.json"] --> a3["labels, branches,<br/>CI gate + branch protection"]
+        end
+        subgraph sgU [update — when your project changes]
+            direction LR
+            u1["re-run against the<br/>changed project"] --> u2["sync the docs<br/>&amp; config"]
+        end
+
+        sgP -->|you approve the plan| sgA
+        sgA -.->|later, as the project evolves| sgU
+    end
+
+    brain ~~~ input
+    input --> sgP
+    brain <-.-|produces the shared brain the other three read| loop
+
+    style brain fill:#DEEBF5,stroke:#3A82B4,color:#15212B
+    style input fill:#FFFFFF,stroke:#94A9B8,color:#33506B
+    style loop fill:#F5F9FC,stroke:#B9CFDF,color:#33506B
+    style sgP fill:#FFFFFF,stroke:#5AA6D4,color:#3A82B4
+    style sgA fill:#FFFFFF,stroke:#3A82B4,stroke-width:2px,color:#3A82B4
+    style sgU fill:#FFFFFF,stroke:#5AA6D4,color:#3A82B4
+    classDef action fill:#EDF4FA,stroke:#7FAECE,color:#15212B
+    class p1,p2,p3,a1,a2,a3,u1,u2 action
+```
+
 ## Quick start
 
 Three commands — `plan`, then `apply`, and `update` when your project changes. Run them from inside the repo you're setting up.
