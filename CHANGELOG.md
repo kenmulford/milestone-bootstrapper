@@ -10,7 +10,7 @@ Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
 | Issue | PR | What |
 |---|---|---|
-| #95 Provision the `md-epic` parent-issue label | this PR | `provision-labels.sh` / `.ps1` now upsert an eleventh label, `md-epic` (color `006B75`, "Parent issue grouping several milestones into one ordered feature (driver builds them in order)"), as a new **suite slice** — owned by the bootstrapper as its creator, alongside the existing driver and feeder slices. `SPEC.md` §6.3 becomes the single canonical prose enumeration of all eleven labels; `BRIEF.md` Job 2 and `skills/plan/SKILL.md` §B now cite it instead of holding their own copy (the `plan`-generated plan file still enumerates every label by name — only the SKILL's duplicate list was removed). `skills/apply/SKILL.md` updated to the eleven-label count. |
+| #95 Provision the `md-epic` parent-issue label | #96 | `provision-labels.sh` / `.ps1` now upsert an eleventh label, `md-epic` (color `006B75`, "Parent issue grouping several milestones into one ordered feature (driver builds them in order)"), as a new **suite slice** — owned by the bootstrapper as its creator, alongside the existing driver and feeder slices. `SPEC.md` §6.3 becomes the single canonical prose enumeration of all eleven labels; `BRIEF.md` Job 2 and `skills/plan/SKILL.md` §B now cite it instead of holding their own copy (the `plan`-generated plan file still enumerates every label by name — only the SKILL's duplicate list was removed). `skills/apply/SKILL.md` updated to the eleven-label count. |
 
 ### Consumer notes (upgrading from v0.4.0)
 
@@ -20,7 +20,7 @@ Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
 ### ⚖️ Post-run audit trail
 
-Judgment-call PRs for this release: none.
+Judgment-call PRs for this release: #96 — autonomous re-wording of the `md-epic` description to fit GitHub's 100-char label-description limit.
 
 ## v0.4.0 — bootstrapper fidelity: config/secrets, deploy targets, versioning & stack detection
 
