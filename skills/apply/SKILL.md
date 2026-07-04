@@ -161,7 +161,7 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 
 #### Step (3) — Labels — invokes #6
 
-Provision the label taxonomy (the ten driver + feeder labels) idempotently:
+Provision the label taxonomy (the eleven-label taxonomy — `SPEC.md` §6.3) idempotently:
 
 ```bash
 # bash

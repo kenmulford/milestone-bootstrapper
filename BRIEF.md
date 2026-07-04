@@ -45,7 +45,7 @@ The output of Job 1 is a **populated** `.project/` — not just scaffolded place
 So the feeder and driver run with no further setup:
 
 - **Configs** — `.milestone-config/driver.json` (branches, `sourceGlobs`, `uiSurfaceGlobs`, `unitTestCmd`, `preflightCmd`, `e2eEnv`, **`domainSkills`** from the stack capture, **`versioning`** from the versioning policy) and `feeder.json` (`projectDocs`, `reviewer`); minimal, only non-default keys.
-- **Label taxonomy** — create-if-missing the driver's labels (`needs design`, `needs decision`, `blocked`, `needs review`, `judgment call`, `in progress`) and the feeder's (`ui`, `logic`, `risk:light`, `risk:heavy`).
+- **Label taxonomy** — create-if-missing the suite's label taxonomy (the authoritative set is `SPEC.md` §6.3).
 - **Branch model** — create the integration and protected branches if missing; set the default-branch policy.
 - **Branch protection** — on the protected branch: no direct push, PR required, CI status check required (and optionally a review). Via the GitHub API.
 - **CI workflow** — a GitHub Actions workflow running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration branch, registered as the required status check.

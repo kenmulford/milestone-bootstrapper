@@ -2,6 +2,26 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.5.0 — provision `md-epic`, de-dup the label taxonomy
+
+**Theme:** `milestone-driver` 1.15.0 reads a new label, `md-epic`, to treat an issue as a parent issue whose body lists several milestones in build order — but the driver only *reads* it; provisioning it is the bootstrapper's job. Before adding it, the label taxonomy is de-duped to a single canonical prose enumeration (`SPEC.md` §6.3) so future label changes touch one prose site instead of drifting across three.
+
+### ✨ Features / enhancements
+
+| Issue | PR | What |
+|---|---|---|
+| #95 Provision the `md-epic` parent-issue label | this PR | `provision-labels.sh` / `.ps1` now upsert an eleventh label, `md-epic` (color `006B75`, "Parent issue grouping several milestones into one ordered feature (driver builds them in order)"), as a new **suite slice** — owned by the bootstrapper as its creator, alongside the existing driver and feeder slices. `SPEC.md` §6.3 becomes the single canonical prose enumeration of all eleven labels; `BRIEF.md` Job 2 and `skills/plan/SKILL.md` §B now cite it instead of holding their own copy (the `plan`-generated plan file still enumerates every label by name — only the SKILL's duplicate list was removed). `skills/apply/SKILL.md` updated to the eleven-label count. |
+
+### Consumer notes (upgrading from v0.4.0)
+
+- **Existing bootstrapped repos: re-run `update` to provision `md-epic`.** A repo bootstrapped before this release has no `md-epic` label; `apply`/`update` create it idempotently (create-if-missing, upserts color/description on drift) alongside the other ten.
+- **No new profile key.** `md-epic` is a fixed literal, not a `driver.json`/`feeder.json` key — no config migration needed.
+- **Prose de-dup, no behavior change to the ten existing labels.** `SPEC.md` §6.3 is now the sole canonical label enumeration; `BRIEF.md` and `skills/plan/SKILL.md` point at it. The generated `plan` file's label preview is unchanged in completeness.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none.
+
 ## v0.4.0 — bootstrapper fidelity: config/secrets, deploy targets, versioning & stack detection
 
 **Theme:** The scaffolded `.project/` docs and `.milestone-config/` profiles now capture more of a project as first-class, structured, citable facts — a config & secrets catalog, deployment targets, and versioning that actually reaches the feeder — while the config writers stop drifting from the driver/feeder schemas and front-end detection covers the mainstream JS frameworks.

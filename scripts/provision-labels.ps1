@@ -6,9 +6,10 @@
 #   The `apply` and `update` verbs call this to guarantee that every label
 #   milestone-driver and milestone-feeder rely on already exists in the target
 #   GitHub repo, so both downstream tools run with no further label setup. It
-#   creates the ten labels (six from the driver, four from the feeder) if they
-#   are missing, and upserts color + description if they already exist — so a
-#   re-run never produces duplicates and corrects any drifted color/description.
+#   creates the eleven labels (six from the driver, four from the feeder, one
+#   from the suite) if they are missing, and upserts color + description if
+#   they already exist — so a re-run never produces duplicates and corrects
+#   any drifted color/description.
 #
 # Why provision in-house (not by invoking the sibling setup skills):
 #   milestone-driver:setup and milestone-feeder:setup also write config and run
@@ -20,6 +21,7 @@
 # Taxonomy source of truth (verbatim):
 #   Driver slice — milestone-driver/skills/setup/SKILL.md:178-186, :205-211
 #   Feeder slice — milestone-feeder/skills/setup/SKILL.md:95-100,  :107-110
+#   Suite slice  — bootstrapper-owned; canonical prose enumeration SPEC.md §6.3
 #
 # Preconditions:
 #   `gh` installed and authenticated, run inside a GitHub-connected working
@@ -68,7 +70,7 @@ if ($LASTEXITCODE -ne 0) {
 try { gh label edit "judgment-call"   --name "judgment call" --color FBCA04 *> $null } catch { }
 try { gh label edit "⚠ judgment-call" --name "judgment call" --color FBCA04 *> $null } catch { }
 
-# --- Idempotent upsert: ten labels as a flat list (no shell loop) ------------
+# --- Idempotent upsert: eleven labels as a flat list (no shell loop) --------
 # `--force` creates the label if absent and updates color/description if it
 # already exists; re-runs produce no duplicates. A flat list keeps these calls
 # identical to the bash companion and portable across platforms.
@@ -87,4 +89,7 @@ gh label create "logic"          --color 0E8A16 --description "Logic / non-UI is
 gh label create "risk:light"     --color C2E0C6 --description "Reduced-ceremony build profile (driver override)" --force
 gh label create "risk:heavy"     --color B60205 --description "Full-ceremony build profile (driver override)" --force
 
-Write-Output "milestone-bootstrapper: provisioned 10 labels (6 driver + 4 feeder)."
+# Suite slice (1) — bootstrapper-owned; canonical prose enumeration SPEC.md §6.3
+gh label create "md-epic"        --color 006B75 --description "Parent issue grouping several milestones into one ordered feature (driver builds them in order)" --force
+
+Write-Output "milestone-bootstrapper: provisioned 11 labels (6 driver + 4 feeder + 1 suite)."
