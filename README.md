@@ -1,4 +1,6 @@
-# milestone-bootstrapper
+<p align="center">
+  <img src="assets/milestone-bootstrapper.svg" alt="milestone-bootstrapper — a milestone suite plugin" width="740">
+</p>
 
 The milestone-bootstrapper creates and stores all of the important parts of a project beyond the code. Conventions, style guides, production architecture, and framework decisions are captured here so the [`milestone-feeder`](https://github.com/kenmulford/milestone-feeder), [`milestone-driver`](https://github.com/kenmulford/milestone-driver), and [`milestone-coherence-reviewer`](https://github.com/kenmulford/milestone-coherence-reviewer) operate with that knowledge. The goal of this plugin is to reduce drift during longer code sessions by reinforcing *how* you architect your project.
 
