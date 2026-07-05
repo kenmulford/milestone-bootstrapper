@@ -5,9 +5,9 @@ description: This skill should be used when the user invokes "/milestone-bootstr
 
 # update — reconcile a refreshed plan onto an already-bootstrapped repo (diff-first, propose human-owned, non-destructive)
 
-Refresh the plan file `plan` wrote for this project (same deterministic slug), then reconcile it onto the live repo, diffing each entry against live state per the frontmatter's PATCH/ADD/PROPOSE/FLAG contract. Where `apply` deploys onto a fresh repo, `update` re-deploys onto one that already exists — the **architecture-changed path is first-class** ("we adopted Redis", "switched the ORM"): the human re-runs `plan`, then `update` reconciles the delta.
+Refresh the plan file `plan` wrote for this project (same deterministic slug), then reconcile it onto the live repo, diffing each entry against live state per the PATCH/ADD/PROPOSE/FLAG contract. Where `apply` deploys onto a fresh repo, `update` re-deploys onto one that exists — the **architecture-changed path is first-class** ("we adopted Redis", "switched the ORM"): re-run `plan`, `update` reconciles the delta.
 
-The **plan file is the source of truth** (`SPEC.md` §1); `update` is **idempotent** (a fully-synced repo is a true no-op, §4.4) and reconciles onto an **already-bootstrapped** repo only — the inverse of `apply`'s first-deploy branch (no `.project/` + no `.milestone-config/` → 🔴 error-and-stop, Step 1). Full Non-negotiables below.
+The **plan file is the source of truth** (`SPEC.md` §1); `update` is **idempotent** (a fully-synced repo is a true no-op, §4.4) and reconciles onto an **already-bootstrapped** repo only — the inverse of `apply`'s first-deploy branch (no `.project/` + no `.milestone-config/` → 🔴 error-and-stop, Step 1).
 
 ## Announce first
 
@@ -23,7 +23,7 @@ Say this to the user before doing any work — pick the line that matches the re
 
 ### Step 0 — Read the bootstrapper context + check the `gh` precondition
 
-**Resolve the project-docs path** — `feeder.json#projectDocs` when present, else `.project/` (`SPEC.md` §4.1); must agree with the plan file's `Project-docs path` field (Step 2), which is authoritative and gates the bootstrapped-repo check (Step 1). **`appRoots`** likewise comes from the plan file, already baked into the §B globs (default `["."]`) — `update` never re-detects or re-bakes; a changed value surfaces as ordinary **glob drift** in §B Configs.
+**Resolve the project-docs path** — `feeder.json#projectDocs` when present, else `.project/` (`SPEC.md` §4.1); must agree with the plan file's `Project-docs path` field (Step 2), authoritative for the bootstrapped-repo check (Step 1). **`appRoots`** likewise comes from the plan file, baked into the §B globs (default `["."]`) — `update` never re-bakes; a changed value surfaces as ordinary **glob drift** in §B Configs.
 
 **Check the `gh` precondition up front** (`BRIEF.md:82`) — remote reconcile (labels, branches, CI, protection) needs `gh` authenticated; **protection needs repo-admin**:
 
@@ -74,7 +74,7 @@ Derive `<slug>` **deterministically** from the one-line project goal — same al
 
 ### Step 3 — Read the plan-file contract (the fields `update` reconciles)
 
-The refreshed plan file is the **load-bearing build artifact** — `update` reads and reconciles against it, regenerating nothing (`SPEC.md` §1, §8, §4). A required field absent or unparseable is a **malformed plan** — error-and-stop naming it. Same contract `apply` parses, plus `update` keys on each entry's **Reconcile class** (§4.4).
+The refreshed plan file is the **load-bearing build artifact** — `update` reads and reconciles against it, regenerating nothing (`SPEC.md` §1, §8, §4). A required field absent or unparseable is a **malformed plan** — error-and-stop, named. Same contract `apply` parses, plus `update` keys on each entry's **Reconcile class** (§4.4).
 
 | Plan-file field | Reads it for |
 |---|---|
@@ -88,7 +88,7 @@ The refreshed plan file is the **load-bearing build artifact** — `update` read
 
 ### Step 4 — Reconcile (per entry, by reconcile class — diff-first, propose human-owned, flag live-only)
 
-`update`'s **defining step**. For every §A/§B entry, key on its **Reconcile class** (`SPEC.md` §4.4) and apply the matching branch, **announce-then-write each action**. The reconcile is **diff-first** — show the live→plan diff before writing; a byte-identical target is untouched. Steps 4(3)–4(6) are remote: each is 🔴 **blocked-on-precondition** per Step 0 (protection also needs repo-admin).
+`update`'s **defining step**. For every §A/§B entry, key on its **Reconcile class** (`SPEC.md` §4.4), **announce-then-write each action**. The reconcile is **diff-first** — show the live→plan diff before writing; a byte-identical target is untouched. Steps 4(3)–4(6) are remote: each is 🔴 **blocked-on-precondition** per Step 0 (protection also needs repo-admin).
 
 > **Cross-platform invocation.** Bash/PowerShell twins are behaviorally equivalent, **not byte-identical in CLI** (bash `--flag` vs PowerShell PascalCase `param()`, e.g. `-Repo`, `-DryRun` as `[switch]`) — a bash flag passed to a `.ps1` leaves its param unbound.
 
@@ -101,7 +101,11 @@ The refreshed plan file is the **load-bearing build artifact** — `update` read
 | `human-owned` | A human-editable project doc. **PROPOSE**; **never overwrite** — apply only on acceptance. |
 | `no-op` | Already matches the captured value. **Do nothing**, report it. |
 
-**Tool-owned vs human-owned governs PATCH vs PROPOSE** — configs are mechanics the tool owns; docs are intent the human owns (`project-docs/SPEC.md` §1). Tool-owned: diff, then patch. Human-owned: propose for acceptance. Exception: a doc anchor still at `[TBD]` is not yet human-owned, so writing it is an `add`.
+**Tool-owned vs human-owned governs PATCH vs PROPOSE** — configs are mechanics the tool owns; docs are intent the human owns (`project-docs/SPEC.md` §1). Exception: a doc anchor still at `[TBD]` is not yet human-owned, so writing it is an `add`.
+
+#### Entry-level resumability (worklist + state file)
+
+Before walking 4(1)–4(6), compute the **worklist** — §A/§B entries whose Reconcile class is `add`/`patch` (`human-owned`/`no-op` excluded). Persist each entry's status by `Target` (`SPEC.md` §4.2) to `.milestone-bootstrapper/update-state-<slug>.json` (gitignored, §2.1); a re-run skips `done` entries, resuming from the first not-done one. An unreadable/invalid state file is flagged 🔴, discarded, and recomputed from scratch. Full completion **deletes** the file (ephemeral, `apply`'s no-ledger stance); an empty worklist skips the walk — Step 6's NO-OP line fires. Labels/branches (4(3)/4(4)) derive `done` status by re-checking live state afterward. See `references/entry-resumability.md` for the twins.
 
 #### Step 4 (1) — Project docs (§A) — PROPOSE drift, ADD new sections (reuses #7)
 
@@ -126,7 +130,7 @@ Routed by the **fixed field→doc→anchor map** (`docs/understanding-interview.
 
 #### Step 4 (2) — Configs (§B) — PATCH drift, ADD new keys, PRESERVE live-only via the UNION write (reuses #5 and #8)
 
-The two config writers are **whole-file rewriters, not patchers**, rebuilding the config object from `{}` using only the keys passed, with **no `--dry-run`** — `update` computes the live→plan diff itself and shows it first. A key not passed back is **dropped**, so `update` invokes each writer with the **UNION of keys** (every live key, plus every plan addition), reproducing everything live and dropping nothing. Write through `apply`'s direct-write writers, never the interactive `setup`. See `references/config-union-write.md` for the full rationale, per-key nuances (`domainSkills`, `nonNegotiables`, `versioning`, `stack`/`stackVersionFile`), and the exact CLI invocation.
+The two config writers are **whole-file rewriters, not patchers**, rebuilding the object from `{}` using only the keys passed, with **no `--dry-run`** — `update` computes the live→plan diff itself, shown first. A key not passed back is **dropped**, so `update` invokes each writer with the **UNION of keys** (every live key, plus every plan addition) — dropping nothing. Write through `apply`'s direct-write writers, never `setup`. See `references/config-union-write.md` for the rationale, per-key nuances, and the CLI invocation.
 
 #### Step 4 (3) — Labels (§B) — ADD missing (reuses #6)
 
@@ -156,7 +160,7 @@ Reconcile the integration + protected branches (create-if-missing) and default-b
 
 #### Step 4 (5) — CI workflow (BEFORE protection) — ADD/PATCH non-destructively (reuses #11)
 
-Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into the integration branch. **CI is reconciled strictly before protection** — its job names are the required status-check contexts, which must already exist (`BRIEF.md:90`; `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). Non-destructive on divergence: absent → created, byte-identical → no-op, **differs → not clobbered** (exit 3, shown as a diff and flagged 🔴):
+Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into the integration branch. **CI is reconciled strictly before protection** — its job names are the required status-check contexts (`BRIEF.md:90`; `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). Non-destructive: absent → created, byte-identical → no-op, **differs → not clobbered** (exit 3, flagged 🔴):
 
 ```bash
 ./scripts/emit-ci-workflow.sh --repo "<repo>"
@@ -180,7 +184,7 @@ Re-assert the protected branch's server-side safety floor — the **only re-asse
 
 ### Step 5 — The live-only case (present live, absent from the refreshed plan) — FLAG 🔴, NEVER delete
 
-A target present **live** but **absent from the refreshed plan** — a doc anchor, config key, label, or branch — is **flagged 🔴 and never removed** (mirrors the feeder update's flag-don't-close stance, `milestone-feeder/skills/update/SKILL.md:141`). For a doc/label/branch this means no write at all; for a **config key** it's active — the writers rebuild the whole file (Step 4 (2)), so `update` must **pass the live-only key back in the union write** to preserve it.
+A target present **live** but **absent from the refreshed plan** — a doc anchor, config key, label, or branch — is **flagged 🔴 and never removed** (mirrors the feeder update's flag-don't-close stance, `milestone-feeder/skills/update/SKILL.md:141`). For a **config key** this is active: the writers rebuild the whole file (Step 4 (2)), so `update` passes it back in the union write.
 
 | Live-only target | Detection | Why flagged, never deleted |
 |---|---|---|
@@ -204,7 +208,7 @@ Write a concise reconcile report (table form):
 
 ## Output style
 
-Be concise — report status and outcomes flatly, no wall-of-text. Present the precondition status, the bootstrapped-repo check, the per-class reconcile, and the per-entry outcomes as **tables**, not inline prose. Show every PATCH/PROPOSE as a unified-style diff before any write. Mark anything needing a human with 🔴 — every re-surfaced `[TBD]`, proposed edit, live-only flag, and blocked-on-precondition step (mirrors the suite's shared output style, `BRIEF.md:80`).
+Be concise — report status flatly, no wall-of-text. Present the precondition status, bootstrapped-repo check, per-class reconcile, and per-entry outcomes as **tables**, not inline prose. Show every PATCH/PROPOSE as a unified-style diff before any write. Mark anything needing a human with 🔴 — every re-surfaced `[TBD]`, proposed edit, live-only flag, and blocked-on-precondition step (`BRIEF.md:80`).
 
 ## Non-negotiables
 
@@ -216,6 +220,6 @@ Be concise — report status and outcomes flatly, no wall-of-text. Present the p
 - **Non-destructive by construction.** Never delete a branch, config key, doc/anchor, or label; never overwrite a human doc; never remove a live-only target — flagged 🔴 instead (Step 5). Re-asserting protection is the one allowed re-assertion (merge-UP).
 - **Idempotent — a fully-synced repo is a TRUE NO-OP.** Nothing drifted/new/differing/live-only → zero writes and a no-op line; a re-run is a no-op by construction (`SPEC.md` §4.4).
 - **Three distinct states, never collapsed** — `captured` reconciles; `none` is a reported no-op; `[TBD]` 🔴 is re-surfaced and left unwritten, never fabricated (`SPEC.md` §4.3).
-- **Cannot collapse an existing `feeder.json` back to `{}`.** The feeder config writer never emits `{}` and never deletes an existing file (issue #77's non-destructive contract) — so resetting the last non-default feeder key to its default leaves the prior `feeder.json` in place, byte-unchanged, not emptied (Step 4 (2)).
+- **Cannot collapse an existing `feeder.json` back to `{}`.** The feeder writer never emits `{}` or deletes an existing file (issue #77) — resetting the last non-default key leaves it byte-unchanged, not emptied (`references/config-union-write.md`).
 - **The `gh` precondition is surfaced, never silent.** Local reconcile runs regardless; remote reconcile (labels, branches, CI, protection — the last needing repo-admin) is 🔴 blocked-on-precondition when `gh` auth/scope is missing (`BRIEF.md:82`).
 - **No flags. Authors no application code, opens no PRs.** The reconcile verb of the plan/apply/update trio — nothing to argument-parse (`BRIEF.md:64`).
