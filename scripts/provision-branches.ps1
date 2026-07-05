@@ -161,16 +161,23 @@ function New-Branch([string]$name, [string]$sha) {
 }
 
 # --- Inspect current state (adopt-or-init: act only on what is missing) -------
-$currentDefault = (gh api "repos/$slug" --jq '.default_branch' 2>$null)
-if ($LASTEXITCODE -ne 0) { $currentDefault = '' }
+# Wrapped as a function (not a one-shot block) so the read-back retry below can
+# re-inspect actual remote state before its one re-attempt (issue #109).
+function Update-State {
+    $script:currentDefault = (gh api "repos/$slug" --jq '.default_branch' 2>$null)
+    if ($LASTEXITCODE -ne 0) { $script:currentDefault = '' }
 
-$protectedPresent   = Test-Branch $protectedBranch
-$integrationPresent = Test-Branch $integrationBranch
+    $script:protectedPresent   = Test-Branch $protectedBranch
+    $script:integrationPresent = Test-Branch $integrationBranch
 
-# The default-branch placeholder of an empty repo (e.g. "main") is NOT a real
-# ref, so treat the policy as "already correct" only when the protected branch
-# actually exists. Otherwise we'd report a no-op while no branch exists.
-$defaultCorrect = ($currentDefault -eq $protectedBranch) -and $protectedPresent
+    # The default-branch placeholder of an empty repo (e.g. "main") is NOT a
+    # real ref, so treat the policy as "already correct" only when the
+    # protected branch actually exists. Otherwise we'd report a no-op while no
+    # branch exists.
+    $script:defaultCorrect = ($script:currentDefault -eq $protectedBranch) -and $script:protectedPresent
+}
+
+Update-State
 
 # --- Plan the actions (shared by -DryRun preview and the executor) -----------
 $planProtected = if ($protectedPresent) { 'exists (adopt)' } else { 'CREATE from base commit' }
@@ -199,45 +206,91 @@ if ($DryRun) {
 }
 
 # --- Execute (idempotent; create only what is missing) -----------------------
+# $changed is initialized once, OUTSIDE the function, and only ever set to
+# $true (never reset to $false) — a second call from the read-back retry below
+# must not erase the fact that the first pass already wrote something.
 $changed = $false
 
-# 1. Protected branch — the base/root. Created from a base commit when missing.
-if (-not $protectedPresent) {
-    $sha = Get-BaseSha
-    if ([string]::IsNullOrEmpty($sha)) {
-        Fail "🔴 cannot create the protected branch '$protectedBranch': the repository has no commit yet. Make an initial commit (e.g. 'git commit --allow-empty' then push), then re-run. Nothing changed."
+function Invoke-BranchModel {
+    # 1. Protected branch — the base/root. Created from a base commit when missing.
+    if (-not $script:protectedPresent) {
+        $sha = Get-BaseSha
+        if ([string]::IsNullOrEmpty($sha)) {
+            Fail "🔴 cannot create the protected branch '$protectedBranch': the repository has no commit yet. Make an initial commit (e.g. 'git commit --allow-empty' then push), then re-run. Nothing changed."
+        }
+        if (-not (New-Branch $protectedBranch $sha)) {
+            ApiFail "failed to create the protected branch '$protectedBranch'. Nothing was deleted or force-pushed; no further step ran. Re-run after resolving the error."
+        }
+        Write-Output "milestone-bootstrapper: created protected branch '$protectedBranch'."
+        $script:protectedPresent = $true
+        $script:changed = $true
     }
-    if (-not (New-Branch $protectedBranch $sha)) {
-        ApiFail "failed to create the protected branch '$protectedBranch'. Nothing was deleted or force-pushed; no further step ran. Re-run after resolving the error."
+
+    # 2. Integration branch — branched FROM the (now-present) protected branch.
+    if (-not $script:integrationPresent) {
+        $sha = (gh api "repos/$slug/git/ref/heads/$protectedBranch" --jq '.object.sha' 2>$null)
+        if ($LASTEXITCODE -ne 0) { $sha = '' }
+        if ([string]::IsNullOrEmpty($sha)) {
+            ApiFail "cannot branch '$integrationBranch' from '$protectedBranch': the protected branch ref could not be resolved. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
+        }
+        if (-not (New-Branch $integrationBranch $sha)) {
+            ApiFail "failed to create the integration branch '$integrationBranch' from '$protectedBranch'. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
+        }
+        Write-Output "milestone-bootstrapper: created integration branch '$integrationBranch' from '$protectedBranch'."
+        $script:integrationPresent = $true
+        $script:changed = $true
     }
-    Write-Output "milestone-bootstrapper: created protected branch '$protectedBranch'."
-    $protectedPresent = $true
-    $changed = $true
+
+    # 3. Default-branch policy — set to protected only when it does not already match.
+    if (-not $script:defaultCorrect) {
+        gh repo edit $slug --default-branch $protectedBranch *> $null
+        if ($LASTEXITCODE -ne 0) {
+            ApiFail "failed to set the default branch to '$protectedBranch'. Branches already created were left in place; no force-push, no deletion. Re-run after resolving the error."
+        }
+        Write-Output "milestone-bootstrapper: set default branch to '$protectedBranch'."
+        $script:changed = $true
+    }
 }
 
-# 2. Integration branch — branched FROM the (now-present) protected branch.
-if (-not $integrationPresent) {
-    $sha = (gh api "repos/$slug/git/ref/heads/$protectedBranch" --jq '.object.sha' 2>$null)
-    if ($LASTEXITCODE -ne 0) { $sha = '' }
-    if ([string]::IsNullOrEmpty($sha)) {
-        ApiFail "cannot branch '$integrationBranch' from '$protectedBranch': the protected branch ref could not be resolved. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
+Invoke-BranchModel
+
+# --- Read-back verify + one bounded retry (issue #109) -----------------------
+# GitHub's API can accept a branch/ref write (exit 0) that doesn't durably
+# stick (eventual consistency) — only run this when this pass actually wrote
+# something ($changed); an all-already-correct run made no write this pass, so
+# there is nothing new to verify (mirrors provision-protection.ps1's existing
+# no-op-skips-read-back shape). Re-checks the exact three facts just asserted:
+# both branches exist and the default branch is the protected branch. On any
+# mismatch, refresh state and retry the write exactly ONCE before halting —
+# never a second retry (`.project/design-philosophy.md#Error & failure
+# philosophy`).
+function Test-BranchModel {  # returns an array of diverged-check descriptions (empty if all match)
+    $diverged = @()
+    gh api "repos/$slug/branches/$protectedBranch" *> $null
+    if ($LASTEXITCODE -ne 0) { $diverged += "protected branch '$protectedBranch' not found on read-back" }
+    gh api "repos/$slug/branches/$integrationBranch" *> $null
+    if ($LASTEXITCODE -ne 0) { $diverged += "integration branch '$integrationBranch' not found on read-back" }
+    $rbDefault = (gh api "repos/$slug" --jq '.default_branch' 2>$null)
+    if ($LASTEXITCODE -ne 0) { $rbDefault = '' }
+    if ($rbDefault -ne $protectedBranch) {
+        $shown = if ([string]::IsNullOrEmpty($rbDefault)) { '<none>' } else { $rbDefault }
+        $diverged += "default branch is '$shown', expected '$protectedBranch' on read-back"
     }
-    if (-not (New-Branch $integrationBranch $sha)) {
-        ApiFail "failed to create the integration branch '$integrationBranch' from '$protectedBranch'. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
-    }
-    Write-Output "milestone-bootstrapper: created integration branch '$integrationBranch' from '$protectedBranch'."
-    $integrationPresent = $true
-    $changed = $true
+    return $diverged
 }
 
-# 3. Default-branch policy — set to protected only when it does not already match.
-if (-not $defaultCorrect) {
-    gh repo edit $slug --default-branch $protectedBranch *> $null
-    if ($LASTEXITCODE -ne 0) {
-        ApiFail "failed to set the default branch to '$protectedBranch'. Branches already created were left in place; no force-push, no deletion. Re-run after resolving the error."
+if ($changed) {
+    $diverged = @(Test-BranchModel)
+    if ($diverged.Count -gt 0) {
+        Write-Output "milestone-bootstrapper: branch-model read-back drift for ${slug} — retrying once:"
+        foreach ($d in $diverged) { Write-Output "milestone-bootstrapper:   $d" }
+        Update-State
+        Invoke-BranchModel
+        $diverged = @(Test-BranchModel)
+        if ($diverged.Count -gt 0) {
+            ApiFail "branch-model read-back still diverges after one retry for ${slug}: $($diverged -join '; '). What was already created was left in place; re-run after resolving the drift."
+        }
     }
-    Write-Output "milestone-bootstrapper: set default branch to '$protectedBranch'."
-    $changed = $true
 }
 
 if (-not $changed) {

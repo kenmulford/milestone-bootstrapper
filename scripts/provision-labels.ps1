@@ -36,6 +36,14 @@ function Fail([string]$message) {
     exit 1
 }
 
+# ApiFail <msg> — the post-write read-back still disagrees after one retry.
+# Never a silent pass-through; exit 2 mirrors the sibling scripts' mid-run
+# API-failure code (provision-branches.ps1, provision-protection.ps1).
+function ApiFail([string]$message) {
+    [Console]::Error.WriteLine("milestone-bootstrapper: 🔴 $message")
+    exit 2
+}
+
 # --- Preconditions (surface the unmet one by name; provision nothing) --------
 # `gh` reports failure via a non-zero exit code, not a thrown exception, so each
 # check inspects $LASTEXITCODE. A missing `gh` raises a command-not-found error,
@@ -43,6 +51,10 @@ function Fail([string]$message) {
 
 try { gh --version *> $null } catch {
     Fail "GitHub CLI ('gh') is not installed or not on PATH. Install it from https://cli.github.com, then re-run."
+}
+
+if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
+    Fail "'jq' is required but not found on PATH (needed to parse the post-write label read-back). Install jq, then re-run."
 }
 
 gh auth status *> $null
@@ -70,26 +82,83 @@ if ($LASTEXITCODE -ne 0) {
 try { gh label edit "judgment-call"   --name "judgment call" --color FBCA04 *> $null } catch { }
 try { gh label edit "⚠ judgment-call" --name "judgment call" --color FBCA04 *> $null } catch { }
 
-# --- Idempotent upsert: eleven labels as a flat list (no shell loop) --------
-# `--force` creates the label if absent and updates color/description if it
-# already exists; re-runs produce no duplicates. A flat list keeps these calls
-# identical to the bash companion and portable across platforms.
+# --- Label taxonomy: single source of truth for both upsert and read-back ---
+# Parallel arrays, one element per label, index-aligned. Defined once so the
+# post-write read-back below (issue #109) compares against exactly what was
+# just asserted rather than a second, driftable copy. Values verbatim from
+# SPEC.md §6.3.
+#   Driver slice (6)  — milestone-driver/skills/setup/SKILL.md:205-211
+#   Feeder slice (4)  — milestone-feeder/skills/setup/SKILL.md:107-110
+#   Suite slice  (1)  — bootstrapper-owned; canonical prose enumeration SPEC.md §6.3
+$LabelNames = @(
+    'in progress', 'blocked', 'needs design', 'needs decision', 'needs review', 'judgment call',
+    'ui', 'logic', 'risk:light', 'risk:heavy',
+    'md-epic'
+)
+$LabelColors = @(
+    '1D76DB', 'B60205', '5319E7', 'D93F0B', '0E8A16', 'FBCA04',
+    '5319E7', '0E8A16', 'C2E0C6', 'B60205',
+    '006B75'
+)
+$LabelDescriptions = @(
+    'Branch open with partial or parked work; not yet done',
+    "Can't proceed; waiting on something external (unmerged dependency, unverified E2E)",
+    'Design direction required before building',
+    'Non-design human decision required',
+    'Built; awaiting human review/merge (e.g. a UI PR awaiting visual sign-off)',
+    'Borderline autonomous call — audit post-run',
+    'UI-surface issue (design review applies)',
+    'Logic / non-UI issue',
+    'Reduced-ceremony build profile (driver override)',
+    'Full-ceremony build profile (driver override)',
+    'Parent issue grouping several milestones into one ordered feature (driver builds them in order)'
+)
 
-# Driver slice (6) — milestone-driver/skills/setup/SKILL.md:205-211
-gh label create "in progress"    --color 1D76DB --description "Branch open with partial or parked work; not yet done" --force
-gh label create "blocked"        --color B60205 --description "Can't proceed; waiting on something external (unmerged dependency, unverified E2E)" --force
-gh label create "needs design"   --color 5319E7 --description "Design direction required before building" --force
-gh label create "needs decision" --color D93F0B --description "Non-design human decision required" --force
-gh label create "needs review"   --color 0E8A16 --description "Built; awaiting human review/merge (e.g. a UI PR awaiting visual sign-off)" --force
-gh label create "judgment call"  --color FBCA04 --description "Borderline autonomous call — audit post-run" --force
+# Set-Labels — idempotent `--force` upsert over the taxonomy above: creates a
+# missing label, corrects a drifted color/description, never duplicates on
+# re-run. Callable more than once (the retry below re-invokes it verbatim).
+function Set-Labels {
+    for ($i = 0; $i -lt $LabelNames.Count; $i++) {
+        gh label create $LabelNames[$i] --color $LabelColors[$i] --description $LabelDescriptions[$i] --force
+    }
+}
 
-# Feeder slice (4) — milestone-feeder/skills/setup/SKILL.md:107-110
-gh label create "ui"             --color 5319E7 --description "UI-surface issue (design review applies)" --force
-gh label create "logic"          --color 0E8A16 --description "Logic / non-UI issue" --force
-gh label create "risk:light"     --color C2E0C6 --description "Reduced-ceremony build profile (driver override)" --force
-gh label create "risk:heavy"     --color B60205 --description "Full-ceremony build profile (driver override)" --force
-
-# Suite slice (1) — bootstrapper-owned; canonical prose enumeration SPEC.md §6.3
-gh label create "md-epic"        --color 006B75 --description "Parent issue grouping several milestones into one ordered feature (driver builds them in order)" --force
-
+Set-Labels
 Write-Output "milestone-bootstrapper: provisioned 11 labels (6 driver + 4 feeder + 1 suite)."
+
+# --- Read-back verify + one bounded retry (issue #109) -----------------------
+# GitHub's API can accept a label write (exit 0) that doesn't durably stick
+# (eventual consistency) — the upsert above succeeding is not on its own proof
+# the taxonomy landed. Compare `gh label list` against the same eleven
+# name/color/description triples the upsert just asserted; on any mismatch,
+# retry the upsert exactly ONCE and re-verify before halting — never a second
+# retry (`.project/design-philosophy.md#Error & failure philosophy`; mirrors
+# `provision-protection.ps1`'s existing read-back-and-halt sibling pattern).
+#
+# Test-Labels — returns the diverged label names (empty array if all match).
+# -Limit 100 covers the taxonomy plus any pre-existing repo labels; color is
+# compared case-insensitively (GitHub normalizes hex color casing on read-back).
+function Test-Labels {
+    $actualJson = (gh label list --json name,color,description --limit 100 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($actualJson)) { $actualJson = '[]' }
+    $actual = @($actualJson | ConvertFrom-Json)
+    $mismatched = @()
+    for ($i = 0; $i -lt $LabelNames.Count; $i++) {
+        $name = $LabelNames[$i]; $color = $LabelColors[$i]; $desc = $LabelDescriptions[$i]
+        $match = $actual | Where-Object {
+            $_.name -eq $name -and $_.color.ToLowerInvariant() -eq $color.ToLowerInvariant() -and $_.description -eq $desc
+        }
+        if (-not $match) { $mismatched += $name }
+    }
+    return $mismatched
+}
+
+$mismatched = @(Test-Labels)
+if ($mismatched.Count -gt 0) {
+    Write-Output "milestone-bootstrapper: label read-back drift for: $($mismatched -join ', ') — retrying once."
+    Set-Labels
+    $mismatched = @(Test-Labels)
+    if ($mismatched.Count -gt 0) {
+        ApiFail "label read-back still diverges after one retry for: $($mismatched -join ', '). Labels already correct were left in place; re-run after resolving the drift."
+    }
+}

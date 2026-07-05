@@ -312,19 +312,41 @@ if [ "$CURRENT" != "null" ]; then
   echo "milestone-bootstrapper: branch protection on '${PROTECTED_BRANCH}' is below the suite floor — reconciling UP (stronger existing settings are preserved)."
 fi
 
-printf '%s' "$PUT_BODY" | gh api -X PUT "repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection" \
-  --input - >/dev/null 2>&1 \
+# put_protection — issues the PUT asserted above; callable more than once (the
+# retry below re-invokes it verbatim against the same, already-computed PUT_BODY).
+put_protection() {
+  printf '%s' "$PUT_BODY" | gh api -X PUT "repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection" \
+    --input - >/dev/null 2>&1
+}
+
+# read_back_protection — the pre-existing acceptance check (unchanged): GETs
+# current protection and confirms all three floors (PR required, enforce_admins,
+# status-check contexts present). Populates PR_REQUIRED/ADMINS_ENFORCED/
+# HAS_CONTEXTS for the caller's message; returns non-zero on a failed GET or a
+# floor not holding.
+read_back_protection() {
+  VERIFY="$(gh api "repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection" 2>/dev/null)" || return 1
+  PR_REQUIRED="$(printf '%s' "$VERIFY" | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')"
+  ADMINS_ENFORCED="$(printf '%s' "$VERIFY" | jq -r '.enforce_admins.enabled // false')"
+  HAS_CONTEXTS="$(printf '%s' "$VERIFY" | jq -r '(.required_status_checks.contexts // []) | length')"
+  [ "$PR_REQUIRED" = "yes" ] && [ "$ADMINS_ENFORCED" = "true" ] && [ "${HAS_CONTEXTS:-0}" -ne 0 ]
+}
+
+put_protection \
   || api_fail "failed to assert branch protection on '${SLUG}' branch '${PROTECTED_BRANCH}' (PUT repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection). No protection was weakened or removed. Re-run after resolving the error (a 403 here means the token lacks repo-admin)."
 
-# --- Read back and verify the floor landed (the acceptance check) -------------
-VERIFY="$(gh api "repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection" 2>/dev/null)" \
-  || api_fail "asserted protection but could not read it back to verify (GET repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection). Re-run to confirm."
-
-PR_REQUIRED="$(printf '%s' "$VERIFY" | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')"
-ADMINS_ENFORCED="$(printf '%s' "$VERIFY" | jq -r '.enforce_admins.enabled // false')"
-HAS_CONTEXTS="$(printf '%s' "$VERIFY" | jq -r '(.required_status_checks.contexts // []) | length')"
-if [ "$PR_REQUIRED" != "yes" ] || [ "$ADMINS_ENFORCED" != "true" ] || [ "${HAS_CONTEXTS:-0}" -eq 0 ]; then
-  api_fail "asserted protection but the read-back does not show all three floors (PR required=${PR_REQUIRED}, enforce_admins=${ADMINS_ENFORCED}, status-check contexts=${HAS_CONTEXTS}) on '${PROTECTED_BRANCH}'. Re-run to confirm."
+# --- Read back and verify the floor landed, with one bounded retry (issue #109) -
+# GitHub's API can accept the PUT above (exit 0) without the floor durably
+# sticking (eventual consistency) — this is the existing acceptance check
+# (read_back_protection, unchanged), now wrapped with exactly ONE retry
+# (re-PUT once, re-verify) before falling into the halt below — never a second
+# retry (`.project/design-philosophy.md#Error & failure philosophy`).
+if ! read_back_protection; then
+  echo "milestone-bootstrapper: branch-protection read-back drift on '${PROTECTED_BRANCH}' — retrying once (re-PUT, re-verify)."
+  put_protection \
+    || api_fail "retry failed: could not re-assert branch protection on '${SLUG}' branch '${PROTECTED_BRANCH}' (PUT repos/${SLUG}/branches/${PROTECTED_BRANCH}/protection). No protection was weakened or removed. Re-run after resolving the error."
+  read_back_protection \
+    || api_fail "asserted protection but the read-back still does not show all three floors after one retry (PR required=${PR_REQUIRED:-unknown}, enforce_admins=${ADMINS_ENFORCED:-unknown}, status-check contexts=${HAS_CONTEXTS:-unknown}) on '${PROTECTED_BRANCH}'. Re-run to confirm."
 fi
 
 echo "milestone-bootstrapper: branch protection asserted on ${SLUG} branch '${PROTECTED_BRANCH}'."
