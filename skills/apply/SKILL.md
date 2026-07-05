@@ -48,7 +48,7 @@ The precondition gates only the remote-dependent steps, never the docs or config
 
 ### Step 1 — Resolve the provisioning plan file
 
-Derive `<slug>` **deterministically** from the one-line project goal, using the same algorithm `plan` uses (`skills/plan/SKILL.md` Step 5; `SPEC.md` §2.2): lowercase, collapse non-alphanumeric runs to a single hyphen, strip leading/trailing hyphens, cap the length. The same goal always resolves to `.milestone-bootstrapper/plan-<slug>.md`.
+Derive `<slug>` **deterministically** from the one-line project goal, using the same algorithm `plan` uses (`skills/plan/SKILL.md` Step 5; `SPEC.md` §2.2): lowercase, collapse non-alphanumeric runs to a single hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5. The same goal always resolves to `.milestone-bootstrapper/plan-<slug>.md`.
 
 | Resolution | Action |
 |---|---|

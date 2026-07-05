@@ -86,7 +86,8 @@
 #                               `false` => write `versioning: false` (the ONLY
 #                               value ever written for this key).
 #     -Stack <enum>             the runtime family the emitter will scaffold setup
-#                               for, one of node|python|dotnet|maui|rust|plugin|none.
+#                               for, one of
+#                               node|python|dotnet|maui|rust|plugin|ruby|none.
 #                               absent-means-default: `none` (or omitted) => OMIT
 #                               the key; any other member => write it. An unknown
 #                               value is a bad input (exit 1).
@@ -279,25 +280,27 @@ if ($versioningIn.Supplied) {
 }
 
 # --- Validate stack (omit-when-default; `none`/unset => OMIT, else write) -------
-# The enum is node|python|dotnet|maui|rust|plugin|none. `none` (and a genuinely
-# unset value: no `-Stack` arg + empty/unset DRIVER_STACK) means "omit the key", so
-# it is VALID input. An explicitly passed empty `-Stack ''` is a BAD INPUT, not
-# `none` — it errors + exit 1 (parity with the bash twin's `${2:?}` arg-empty
-# rejection and the -Versioning empty->error path above). Any non-member value is
-# likewise rejected with a clear message naming the allowed set + exit 1. The
-# descriptive->enum mapping (e.g. angular collapses to node) is issue #65's job —
-# this writer only validates the resolved enum.
+# The enum is node|python|dotnet|maui|rust|plugin|ruby|none. `none` (and a
+# genuinely unset value: no `-Stack` arg + empty/unset DRIVER_STACK) means "omit
+# the key", so it is VALID input. An explicitly passed empty `-Stack ''` is a BAD
+# INPUT, not `none` — it errors + exit 1 (parity with the bash twin's `${2:?}`
+# arg-empty rejection and the -Versioning empty->error path above). Any non-member
+# value is likewise rejected with a clear message naming the allowed set + exit 1.
+# The descriptive->enum mapping (e.g. angular collapses to node) is issue #65's
+# job — this writer only validates the resolved enum. `ruby` covers both Rails and
+# plain Ruby (parity with `python` covering FastAPI/Django/Flask/unresolved as one
+# enum member; issue #104).
 $writeStack = $false
 if ($stackArgEmpty) {
-    [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|none (got: ).")
+    [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|ruby|none (got: ).")
     exit 1
 }
 if (-not [string]::IsNullOrEmpty($Stack)) {
     switch ($Stack) {
-        { $_ -in 'node', 'python', 'dotnet', 'maui', 'rust', 'plugin' } { $writeStack = $true }
+        { $_ -in 'node', 'python', 'dotnet', 'maui', 'rust', 'plugin', 'ruby' } { $writeStack = $true }
         'none' { $writeStack = $false }  # default => omit
         default {
-            [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|none (got: $Stack).")
+            [Console]::Error.WriteLine("ERROR: -Stack must be one of node|python|dotnet|maui|rust|plugin|ruby|none (got: $Stack).")
             exit 1
         }
     }
