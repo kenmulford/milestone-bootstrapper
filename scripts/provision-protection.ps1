@@ -321,22 +321,47 @@ if ($current -ne 'null') {
     Write-Output "milestone-bootstrapper: branch protection on '$protectedBranch' is below the suite floor — reconciling UP (stronger existing settings are preserved)."
 }
 
-$putBody | gh api -X PUT "repos/$slug/branches/$protectedBranch/protection" --input - *> $null
-if ($LASTEXITCODE -ne 0) {
+# Invoke-ProtectionPut — issues the PUT asserted above; callable more than
+# once (the retry below re-invokes it verbatim against the same, already-
+# computed $putBody). Returns $true on success.
+function Invoke-ProtectionPut {
+    $putBody | gh api -X PUT "repos/$slug/branches/$protectedBranch/protection" --input - *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# Test-ProtectionReadBack — the pre-existing acceptance check (unchanged): GETs
+# current protection and confirms all three floors (PR required, enforce_admins,
+# status-check contexts present). Sets $script:prRequired/$script:adminsEnforced/
+# $script:hasContexts for the caller's message; returns $false on a failed GET
+# or a floor not holding.
+function Test-ProtectionReadBack {
+    $verify = (gh api "repos/$slug/branches/$protectedBranch/protection" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($verify)) { return $false }
+    $script:prRequired = ($verify | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')
+    $script:adminsEnforced = ($verify | jq -r '.enforce_admins.enabled // false')
+    $script:hasContexts = ($verify | jq -r '(.required_status_checks.contexts // []) | length')
+    return (($script:prRequired -eq 'yes') -and ($script:adminsEnforced -eq 'true') -and ([int]$script:hasContexts -ne 0))
+}
+
+if (-not (Invoke-ProtectionPut)) {
     ApiFail "failed to assert branch protection on '$slug' branch '$protectedBranch' (PUT repos/$slug/branches/$protectedBranch/protection). No protection was weakened or removed. Re-run after resolving the error (a 403 here means the token lacks repo-admin)."
 }
 
-# --- Read back and verify the floor landed (the acceptance check) -------------
-$verify = (gh api "repos/$slug/branches/$protectedBranch/protection" 2>$null)
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($verify)) {
-    ApiFail "asserted protection but could not read it back to verify (GET repos/$slug/branches/$protectedBranch/protection). Re-run to confirm."
-}
-
-$prRequired = ($verify | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')
-$adminsEnforced = ($verify | jq -r '.enforce_admins.enabled // false')
-$hasContexts = ($verify | jq -r '(.required_status_checks.contexts // []) | length')
-if (($prRequired -ne 'yes') -or ($adminsEnforced -ne 'true') -or ([int]$hasContexts -eq 0)) {
-    ApiFail "asserted protection but the read-back does not show all three floors (PR required=$prRequired, enforce_admins=$adminsEnforced, status-check contexts=$hasContexts) on '$protectedBranch'. Re-run to confirm."
+# --- Read back and verify the floor landed, with one bounded retry (issue #109) -
+# GitHub's API can accept the PUT above (exit 0) without the floor durably
+# sticking (eventual consistency) — this is the existing acceptance check
+# (Test-ProtectionReadBack, unchanged), now wrapped with exactly ONE retry
+# (re-PUT once, re-verify) before falling into the halt below — never a second
+# retry (`.project/design-philosophy.md#Error & failure philosophy`).
+$prRequired = 'unknown'; $adminsEnforced = 'unknown'; $hasContexts = 'unknown'
+if (-not (Test-ProtectionReadBack)) {
+    Write-Output "milestone-bootstrapper: branch-protection read-back drift on '$protectedBranch' — retrying once (re-PUT, re-verify)."
+    if (-not (Invoke-ProtectionPut)) {
+        ApiFail "retry failed: could not re-assert branch protection on '$slug' branch '$protectedBranch' (PUT repos/$slug/branches/$protectedBranch/protection). No protection was weakened or removed. Re-run after resolving the error."
+    }
+    if (-not (Test-ProtectionReadBack)) {
+        ApiFail "asserted protection but the read-back still does not show all three floors after one retry (PR required=$prRequired, enforce_admins=$adminsEnforced, status-check contexts=$hasContexts) on '$protectedBranch'. Re-run to confirm."
+    }
 }
 
 Write-Output "milestone-bootstrapper: branch protection asserted on $slug branch '$protectedBranch'."

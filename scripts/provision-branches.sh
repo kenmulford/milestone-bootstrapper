@@ -156,18 +156,24 @@ create_branch() {
 }
 
 # --- Inspect current state (adopt-or-init: act only on what is missing) -------
-CURRENT_DEFAULT="$(gh api "repos/${SLUG}" --jq '.default_branch' 2>/dev/null)" || CURRENT_DEFAULT=""
+# Wrapped as a function (not a one-shot block) so the read-back retry below can
+# re-inspect actual remote state before its one re-attempt (issue #109).
+inspect_state() {
+  CURRENT_DEFAULT="$(gh api "repos/${SLUG}" --jq '.default_branch' 2>/dev/null)" || CURRENT_DEFAULT=""
 
-PROTECTED_PRESENT=0; branch_exists "$PROTECTED_BRANCH"   && PROTECTED_PRESENT=1
-INTEGRATION_PRESENT=0; branch_exists "$INTEGRATION_BRANCH" && INTEGRATION_PRESENT=1
+  PROTECTED_PRESENT=0; branch_exists "$PROTECTED_BRANCH"   && PROTECTED_PRESENT=1
+  INTEGRATION_PRESENT=0; branch_exists "$INTEGRATION_BRANCH" && INTEGRATION_PRESENT=1
 
-# The default-branch placeholder of an empty repo (e.g. "main") is NOT a real
-# ref, so treat the policy as "already correct" only when the protected branch
-# actually exists. Otherwise we'd report a no-op while no branch exists.
-DEFAULT_CORRECT=0
-if [ "$CURRENT_DEFAULT" = "$PROTECTED_BRANCH" ] && [ "$PROTECTED_PRESENT" -eq 1 ]; then
-  DEFAULT_CORRECT=1
-fi
+  # The default-branch placeholder of an empty repo (e.g. "main") is NOT a real
+  # ref, so treat the policy as "already correct" only when the protected branch
+  # actually exists. Otherwise we'd report a no-op while no branch exists.
+  DEFAULT_CORRECT=0
+  if [ "$CURRENT_DEFAULT" = "$PROTECTED_BRANCH" ] && [ "$PROTECTED_PRESENT" -eq 1 ]; then
+    DEFAULT_CORRECT=1
+  fi
+}
+
+inspect_state
 
 # --- Plan the actions (shared by --dry-run preview and the executor) ----------
 PLAN_PROTECTED="exists (adopt)"
@@ -194,38 +200,80 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 # --- Execute (idempotent; create only what is missing) -----------------------
+# CHANGED is initialized once, OUTSIDE the function, and only ever set to 1
+# (never reset to 0) — a second call from the read-back retry below must not
+# erase the fact that the first pass already wrote something.
 CHANGED=0
 
-# 1. Protected branch — the base/root. Created from a base commit when missing.
-if [ "$PROTECTED_PRESENT" -eq 0 ]; then
-  SHA="$(base_sha)"
-  [ -n "$SHA" ] \
-    || fail "🔴 cannot create the protected branch '${PROTECTED_BRANCH}': the repository has no commit yet. Make an initial commit (e.g. 'git commit --allow-empty' then push), then re-run. Nothing changed."
-  create_branch "$PROTECTED_BRANCH" "$SHA" \
-    || api_fail "failed to create the protected branch '${PROTECTED_BRANCH}'. Nothing was deleted or force-pushed; no further step ran. Re-run after resolving the error."
-  echo "milestone-bootstrapper: created protected branch '${PROTECTED_BRANCH}'."
-  PROTECTED_PRESENT=1
-  CHANGED=1
-fi
+execute_branch_model() {
+  # 1. Protected branch — the base/root. Created from a base commit when missing.
+  if [ "$PROTECTED_PRESENT" -eq 0 ]; then
+    SHA="$(base_sha)"
+    [ -n "$SHA" ] \
+      || fail "🔴 cannot create the protected branch '${PROTECTED_BRANCH}': the repository has no commit yet. Make an initial commit (e.g. 'git commit --allow-empty' then push), then re-run. Nothing changed."
+    create_branch "$PROTECTED_BRANCH" "$SHA" \
+      || api_fail "failed to create the protected branch '${PROTECTED_BRANCH}'. Nothing was deleted or force-pushed; no further step ran. Re-run after resolving the error."
+    echo "milestone-bootstrapper: created protected branch '${PROTECTED_BRANCH}'."
+    PROTECTED_PRESENT=1
+    CHANGED=1
+  fi
 
-# 2. Integration branch — branched FROM the (now-present) protected branch.
-if [ "$INTEGRATION_PRESENT" -eq 0 ]; then
-  SHA="$(gh api "repos/${SLUG}/git/ref/heads/${PROTECTED_BRANCH}" --jq '.object.sha' 2>/dev/null)" || SHA=""
-  [ -n "$SHA" ] \
-    || api_fail "cannot branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}': the protected branch ref could not be resolved. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
-  create_branch "$INTEGRATION_BRANCH" "$SHA" \
-    || api_fail "failed to create the integration branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}'. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
-  echo "milestone-bootstrapper: created integration branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}'."
-  INTEGRATION_PRESENT=1
-  CHANGED=1
-fi
+  # 2. Integration branch — branched FROM the (now-present) protected branch.
+  if [ "$INTEGRATION_PRESENT" -eq 0 ]; then
+    SHA="$(gh api "repos/${SLUG}/git/ref/heads/${PROTECTED_BRANCH}" --jq '.object.sha' 2>/dev/null)" || SHA=""
+    [ -n "$SHA" ] \
+      || api_fail "cannot branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}': the protected branch ref could not be resolved. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
+    create_branch "$INTEGRATION_BRANCH" "$SHA" \
+      || api_fail "failed to create the integration branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}'. The protected branch was left in place; no force-push, no deletion. Re-run after resolving the error."
+    echo "milestone-bootstrapper: created integration branch '${INTEGRATION_BRANCH}' from '${PROTECTED_BRANCH}'."
+    INTEGRATION_PRESENT=1
+    CHANGED=1
+  fi
 
-# 3. Default-branch policy — set to protected only when it does not already match.
-if [ "$DEFAULT_CORRECT" -eq 0 ]; then
-  gh repo edit "$SLUG" --default-branch "$PROTECTED_BRANCH" >/dev/null 2>&1 \
-    || api_fail "failed to set the default branch to '${PROTECTED_BRANCH}'. Branches already created were left in place; no force-push, no deletion. Re-run after resolving the error."
-  echo "milestone-bootstrapper: set default branch to '${PROTECTED_BRANCH}'."
-  CHANGED=1
+  # 3. Default-branch policy — set to protected only when it does not already match.
+  if [ "$DEFAULT_CORRECT" -eq 0 ]; then
+    gh repo edit "$SLUG" --default-branch "$PROTECTED_BRANCH" >/dev/null 2>&1 \
+      || api_fail "failed to set the default branch to '${PROTECTED_BRANCH}'. Branches already created were left in place; no force-push, no deletion. Re-run after resolving the error."
+    echo "milestone-bootstrapper: set default branch to '${PROTECTED_BRANCH}'."
+    CHANGED=1
+  fi
+}
+
+execute_branch_model
+
+# --- Read-back verify + one bounded retry (issue #109) -----------------------
+# GitHub's API can accept a branch/ref write (exit 0) that doesn't durably
+# stick (eventual consistency) — only run this when this pass actually wrote
+# something (CHANGED=1); an all-already-correct run made no write this pass, so
+# there is nothing new to verify (mirrors provision-protection.sh's existing
+# no-op-skips-read-back shape). Re-checks the exact three facts just asserted:
+# both branches exist and the default branch is the protected branch. On any
+# mismatch, refresh state and retry the write exactly ONCE before halting —
+# never a second retry (`.project/design-philosophy.md#Error & failure
+# philosophy`).
+verify_branch_model() {  # echoes each diverged check (one per line); non-zero if any
+  local mismatched=0
+  local rb_default
+  gh api "repos/${SLUG}/branches/${PROTECTED_BRANCH}" >/dev/null 2>&1 \
+    || { echo "protected branch '${PROTECTED_BRANCH}' not found on read-back"; mismatched=1; }
+  gh api "repos/${SLUG}/branches/${INTEGRATION_BRANCH}" >/dev/null 2>&1 \
+    || { echo "integration branch '${INTEGRATION_BRANCH}' not found on read-back"; mismatched=1; }
+  rb_default="$(gh api "repos/${SLUG}" --jq '.default_branch' 2>/dev/null)" || rb_default=""
+  [ "$rb_default" = "$PROTECTED_BRANCH" ] \
+    || { echo "default branch is '${rb_default:-<none>}', expected '${PROTECTED_BRANCH}' on read-back"; mismatched=1; }
+  return "$mismatched"
+}
+
+if [ "$CHANGED" -eq 1 ]; then
+  if ! DIVERGED="$(verify_branch_model)"; then
+    echo "milestone-bootstrapper: branch-model read-back drift for ${SLUG} — retrying once:"
+    echo "$DIVERGED" | sed 's/^/milestone-bootstrapper:   /'
+    inspect_state
+    execute_branch_model
+    if ! DIVERGED="$(verify_branch_model)"; then
+      api_fail "branch-model read-back still diverges after one retry for ${SLUG}: ${DIVERGED//$'\n'/; }. What was already created was left in place; re-run after resolving the drift."
+    fi
+  fi
 fi
 
 if [ "$CHANGED" -eq 0 ]; then
