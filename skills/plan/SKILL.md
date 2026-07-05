@@ -5,17 +5,11 @@ description: This skill should be used when the user invokes "/milestone-bootstr
 
 # plan — interview + inspect + detect → reviewable provisioning plan file
 
-Read the bootstrapper's own profile, check the `gh` precondition, run the understanding interview, detect the stack, inspect the repo (adopt-or-init), compose the answers + detected signals through the doc/config mapping, and write a single reviewable **provisioning plan file**. The bootstrapper's first verb: it previews everything `apply` would later write — and writes nothing else.
+Read the bootstrapper's profile, check the `gh` precondition, run the understanding interview, detect the stack, inspect the repo (adopt-or-init), compose answers + signals via the doc/config mapping, and write one reviewable **provisioning plan file** — Job 1 (durable understanding), Job 2 (suite-readiness) — in the **exact format `SPEC.md` defines**. It **composes** three already-built components, performing **none of their writes itself**: the **understanding interview** (`docs/understanding-interview.md`, #4), **stack detection** (`scripts/detect-stack.sh`, #3), and the **doc/config mapping** (`docs/write-project-docs.md`, #7).
 
-This skill is the preview step of the bootstrapper pipeline. It captures the project's durable understanding (Job 1 — the core) and the suite-readiness change set (Job 2 — supporting), and records both into one reviewable plan file in the **exact format `SPEC.md` defines** (the plan-file-as-interface). It **composes** the already-built components and performs **none of their writes itself**:
+**Load-bearing invariant** (full statement in Non-negotiables): `plan` writes the plan file and NOTHING else ([BRIEF.md:22](../../BRIEF.md)) — `apply`/`update` (#13/#14) are the only verbs that execute it; these are consequential, long-lived decisions that deserve a human read first.
 
-- the **understanding interview** (`docs/understanding-interview.md`, #4) — tier-by-tier capture of goal / architecture / stack / environment / mandated-packages / versioning, and the design system for UI projects;
-- **stack detection** (`scripts/detect-stack.sh`, #3) — detect the stack → its best-practice convention note, framework/version pin, and `domainSkills` candidate;
-- the **doc/config mapping** (`docs/write-project-docs.md`, #7) — compose detection + interview answers into the per-anchor doc-population entries and the non-default config keys.
-
-The load-bearing invariant: **`plan` writes the plan file (local scratch) and NOTHING else** — no project-docs population, no `.milestone-config/*` write, no labels, no branches, no branch protection, no CI, no GitHub state of any kind ([BRIEF.md:22](../../BRIEF.md)). The plan file **records** the planned changes; `apply` / `update` (#13/#14) are the only verbs that execute them. Preview-by-default exists because these are consequential, long-lived decisions that deserve a human read before any write.
-
-The plan-file format is owned by `SPEC.md`, not redefined here — `plan` emits the plan in that format and references it. The skill mirrors the sibling feeder `plan` skill's shape ([`milestone-feeder/skills/plan/SKILL.md:1-18`](../../../milestone-feeder/skills/plan/SKILL.md), `:258-262`): a frontmatter `name`/`description`, an "Announce first" line, a numbered "Procedure" of read-only-then-write-one-scratch-file steps, an output style, and a non-negotiables block — transposed to the bootstrapper's surface (settings + docs, not issues).
+The plan-file format is owned by `SPEC.md`. The skill mirrors the sibling feeder `plan` skill's shape ([`milestone-feeder/skills/plan/SKILL.md:1-18`](../../../milestone-feeder/skills/plan/SKILL.md), `:258-262`), transposed to settings + docs (not issues).
 
 ## Announce first
 
@@ -27,34 +21,24 @@ Say this to the user before doing any work:
 
 ### Step 0 — Read the bootstrapper profile + check the `gh` precondition
 
-**Read the existing config (best-effort, read-only).** Read `.milestone-config/driver.json` and `.milestone-config/feeder.json` if present — they are **not** required to exist (a fresh repo has neither). These reads serve two purposes: (a) seeding any already-set key as the interview's detected default, and (b) the adopt-or-init delta at Step 3. Reading them is a read; it writes nothing.
+**Read the existing config (best-effort, read-only)** — `.milestone-config/driver.json`/`feeder.json`, neither **required** (a fresh repo has neither); seeds (a) the interview's defaults and (b) the adopt-or-init delta at Step 3.
 
-Resolve the **target project-docs path** — where the project docs are written — from `feeder.json#projectDocs` when set, else the default `.project/` (`SPEC.md` §4.1). This is the single resolution; record it once so the plan file's `Target project-docs path` field and every §A entry agree.
+Resolve the **target project-docs path** from `feeder.json#projectDocs` when set, else `.project/` (`SPEC.md` §4.1) — record once so the plan's `Target project-docs path` field and every §A entry agree.
 
-Resolve the **app-roots** — the repo-relative directories the project's apps live under — the same way: a single, once-resolved plan-level field (`SPEC.md` §4.1), mirroring the project-docs-path resolution above. **Default `["."]`** — the repo root *is* the app root (today's single-root behavior). A repo whose apps are **nested** while configs + `.project/` stay at the project root (e.g. `siteroot/web`, `siteroot/api`) carries those paths. Step 0 sets only the **default seed** `["."]`; the actual app-roots are **discovered from the layout inspection at the top of Step 2 and confirmed with the human there — before the per-root detector consumes them** (so a nested repo's detector loop iterates the real candidate roots, not the bare default). Record `appRoots` once so the plan file's `App-roots` field, the per-root detection (Step 2), and the baked globs (Step 4) all agree. `appRoots` is a **plan-file-only** field: it is **not** written into `driver.json` / `feeder.json` and **not** persisted under `.project/` (`SPEC.md` §4.1, §6.1) — it shapes the detection loop and the emitted glob *values*, nothing more.
+Resolve the **app-roots** the same way (`SPEC.md` §4.1). **Default `["."]`** — the repo root *is* the app root (byte-identical to today). Step 0 seeds only this default; the real roots are discovered and confirmed at Step 2. See `references/nested-app-roots.md` for the nested/multi-root rule.
 
-**Check the `gh` precondition up front — surface it, never let it fail silently** ([BRIEF.md:82](../../BRIEF.md); the same precondition discipline the suite holds). Probe `gh` auth/scope read-only:
-
-```bash
-# bash — read-only precondition probe; captures status without changing anything.
-gh auth status >/dev/null 2>&1 && gh_ok=1 || gh_ok=0
-```
-
-```powershell
-# PowerShell 7+ — same read-only probe.
-gh auth status *> $null; $ghOk = $LASTEXITCODE -eq 0
-```
+**Check the `gh` precondition up front — never let it fail silently** ([BRIEF.md:82](../../BRIEF.md)). Probe `gh auth status` read-only (bash: exit code; PowerShell 7+: `$LASTEXITCODE`):
 
 | `gh` state | What `plan` does |
 |---|---|
-| Authenticated with sufficient scope | Proceed normally; the remote-dependent plan entries (branch protection, CI registration) are recorded as ordinary planned changes. |
-| Absent / not authenticated / insufficient scope | **Surface a clear precondition message** — never a silent failure. `plan` writes nothing remote, so it **still emits the plan file**, but marks the remote-dependent entries (branch protection, CI registration) as **🔴 blocked-on-precondition** rather than aborting. It MUST NOT claim those steps will succeed. |
+| Authenticated with sufficient scope | Proceed normally; remote-dependent entries (branch protection, CI) recorded as ordinary planned changes. |
+| Absent / not authenticated / insufficient scope | **Surface a clear message** — never silent. `plan` still emits the plan file, marking those entries **🔴 blocked-on-precondition** rather than aborting; MUST NOT claim they will succeed. |
 
-The precondition only gates the *remote-dependent* suite-readiness entries' deployability — it never blocks the interview, the detection, the project-docs population set, or the plan-file write. Branch protection needs repo-admin scope; record that requirement on the flagged entries so the human knows what to grant before `apply`.
+The precondition only gates *remote-dependent* entries — never the interview, detection, or plan-file write. Branch protection needs repo-admin scope; record on flagged entries.
 
 ### Step 1 — Run the understanding interview (#4)
 
-Run the understanding interview exactly as `docs/understanding-interview.md` defines it — that engine owns the surface, the tier order, and the recording discipline; this step **invokes** it and consumes its output. Follow it tier-by-tier (`docs/understanding-interview.md` §1, Tier order):
+Run the interview as `docs/understanding-interview.md` defines it (tier order, recording discipline); this step **invokes** it, tier-by-tier (§1, Tier order):
 
 | Tier | Captures | Target doc(s) |
 |---|---|---|
@@ -62,139 +46,81 @@ Run the understanding interview exactly as `docs/understanding-interview.md` def
 | 2 · Architecture | Architectural stance, layering, boundaries | `design-philosophy.md` |
 | 3 · Technology stack | Language + version, framework, SQL flavor + ORM, major libraries | `library-manifest.md` + `environment.md` |
 | 4 · Environment model | Data stores + test-data isolation, caching, async/messaging, external services, deployment targets | `environment.md` |
-| 5 · Mandated packages | Libraries/tooling required by purpose (distinct from detection) | `library-manifest.md` |
+| 5 · Mandated packages | Required libraries/tooling (distinct from detection) | `library-manifest.md` |
 | 6 · Versioning policy | SemVer y/n, version-file location, bump cadence | `conventions.md` |
 | 7 · Design system *(UI projects only)* | Tokens, components, layout, required states, a11y, voice | `design-system.md` + `tokens.json` |
-| 8 · Configuration & secrets | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, never values | `config-catalog.md` |
+| 8 · Configuration & secrets | Config/secret norms (connection strings, auth/JWT, API keys, notification targets, CORS, per-env config, build outputs) — names/buckets/shapes/env/required, never values | `config-catalog.md` |
 
-Honor the engine's recording discipline (`docs/understanding-interview.md` §1, §3) verbatim:
+Honor the engine's recording discipline (`docs/understanding-interview.md` §1, §3):
 
-- **Never a blank prompt.** Seed each field's default from Step 2's detection when available, else show an illustrative example (`docs/understanding-interview.md` §1, Default rule). Detection is *soft-coupled* — run Step 2 first (or interleave it) so the stack-derived fields carry a detected seed.
-- **Three distinct states, never collapsed** (`docs/understanding-interview.md` §3.2; `SPEC.md` §4.3): a real answer is `captured`; an explicit "None" / "not yet" / "not applicable" is recorded as the literal value `none` (a captured decision, **not** a gap, **not** `[TBD]`); a genuine unknown the interview cannot resolve and the user cannot supply is left `[TBD]` and flagged 🔴 — **never fabricated, never silently defaulted**.
-- **Skip → `[TBD]` 🔴 with its consequence stated** (`docs/understanding-interview.md` §3.3): a skipped field becomes a flagged `[TBD]`; the skip prompt must have already stated what stays unknown and which downstream lens loses grounding.
-- **Skip Tier 7 entirely for a repo with no UI surface** — `design-system.md` / `tokens.json` are recorded as `none` / not-applicable, which is the correct "no design-lens grounding" signal, not an omission (`docs/understanding-interview.md` Tier order note; `SPEC.md` §5).
+- **Never a blank prompt.** Seed each field from Step 2's detection when available, else an illustrative example (§1, Default rule) — run Step 2 first (or interleave) so stack-derived fields carry a seed.
+- **Three distinct states, never collapsed** (§3.2; full rule in Non-negotiables): `captured` / `none` (not a gap) / `[TBD]` 🔴 (never fabricated).
+- **Skip → `[TBD]` 🔴 with its consequence stated** (§3.3): the skip prompt must state what stays unknown and which lens loses grounding.
+- **Skip Tier 7 for a repo with no UI surface** — `design-system.md`/`tokens.json` record `none` (the correct "no design-lens grounding" signal, not an omission; Tier order note, `SPEC.md` §5).
 
-This step **captures** the understanding; it records nothing to any doc. The captured field → `##` anchor map is owned by `docs/understanding-interview.md` §2 — do not re-derive it here; carry each answer forward keyed by its anchor for Step 4.
+This step **captures** the understanding; it records nothing. The field → `##` anchor map is owned by `docs/understanding-interview.md` §2 — carry each answer forward for Step 4.
 
 ### Step 2 — Resolve the app-roots from the layout, then detect the stack (#3) — once per app-root, then union
 
-**First, resolve `appRoots` from the repo layout — before the detector loop consumes it.** The per-root detector below iterates `appRoots`, so the real (candidate) app-roots must be discovered *here, ahead of the loop* — otherwise the loop would run over Step 0's bare default `["."]` and a genuinely nested repo would detect once at the repo root, find no manifest, and the per-root detection the feature exists for would never run. Inspect read-only **where the app's source signals live** — are `package.json` / `*.csproj` / `pyproject.toml` / `src/` at the repo root, or nested under one or more subdirectories?
+**First, resolve `appRoots` from the repo layout — before the detector loop consumes it** (otherwise a nested repo never gets per-root detection). Inspect read-only where the app's source signals live (`package.json`/`*.csproj`/`pyproject.toml`/`src/`):
 
-- Repo-root signals → `["."]` (single-root, the default — **byte-identical to today**: the loop runs exactly once against the repo root).
-- Signals nested under `siteroot/web`, `siteroot/api`, etc. → those paths are the candidate app-roots. **Confirm them with the human** against the inspected layout before the loop consumes them.
+- Repo-root signals → `["."]` (single-root, the default — **byte-identical to today**).
+- Nested signals (`siteroot/web`, `siteroot/api`, etc.) → those paths, **confirmed with the human** before the loop consumes them.
 
-This is a **read** against current state — it discovers the app-roots and writes nothing. The confirmed `appRoots` is the once-resolved plan-level field from Step 0 (`SPEC.md` §4.1), now grounded in the layout; it drives the per-root detect+union below and the baked globs (Step 4). Step 3's adopt-or-init delta re-states this resolved `appRoots` as part of the read-only reconcile (it confirms, it does not re-discover).
+This grounds Step 0's `appRoots` field (`SPEC.md` §4.1) in the actual layout, driving the detect+union below and the baked globs (Step 4); Step 3 re-states it, confirming rather than re-discovering.
 
-**Then run the stack detector** read-only and consume its TSV output — it reports findings and writes nothing (`scripts/detect-stack.sh` header: "It REPORTS findings; it never writes docs or config"). The detector already accepts a **`[REPO_DIR]` positional** (`scripts/detect-stack.sh` Usage; `scripts/detect-stack.ps1` `-RepoDir`), so the per-app-root loop is **orchestrated here**, not by changing the detector — run it once per resolved `appRoots` entry against that root and **union** the findings:
+**Run the stack detector read-only, once per resolved app-root, and union the findings** — it reports per-root and writes nothing (`scripts/detect-stack.sh` header), accepting a `[REPO_DIR]` positional (`.sh` Usage; `.ps1` `-RepoDir`), orchestrated here, not in the detector. A mixed-stack monorepo carries **both** stacks' conventions/pins/`domainSkills`, deduped (`SPEC.md` §4.1, §5); `flag = human` from any root → `[TBD]` 🔴 for that root. Default `["."]` runs once — **byte-identical to today**. See `references/nested-app-roots.md`.
 
-```bash
-# bash — read-only stack detection, once per app-root. appRoots default ["."]
-# runs the detector exactly once against the repo root (today's behavior, unchanged).
-for root in "${appRoots[@]}"; do        # e.g. (".") or ("siteroot/web" "siteroot/api")
-  ./scripts/detect-stack.sh "$root"     # the detector's [REPO_DIR] positional
-done
-```
+The detector emits TSV — one finding per stack (`stack signal convention manifestPin domainSkills flag versionFile`) — seeding the interview's defaults and the plan's entries. Map `stack` to the `driver.json#stack` enum via `references/stack-detection-mapping.md`; `flag=human` → `[TBD]` 🔴, never guessed.
 
-```powershell
-# PowerShell 7+ — the cross-platform twin (identical findings, -RepoDir positional).
-foreach ($root in $appRoots) {          # e.g. @('.') or @('siteroot/web','siteroot/api')
-  ./scripts/detect-stack.ps1 $root
-}
-```
-
-**Union the per-root findings into one detection set.** The detector reports per-root; `plan` merges (unions) the findings across app-roots into the single scaffolded `.project/` docs + `nonNegotiables` — a mixed-stack monorepo (e.g. a Node `siteroot/web` + a .NET `siteroot/api`) carries **both** stacks' conventions / manifest pins / `domainSkills` candidates, deduped (`SPEC.md` §4.1 `appRoots`, §5). The union is the recorded stack capture; `domainSkills` is the deduped union of every root's mapped skills. A `flag = human` from **any** root (no signal, ambiguous primary, unresolved framework) carries into the plan as a `[TBD]` 🔴 for that root — flagged unknowns are never guessed. For the **default `["."]`** the loop runs exactly once against the repo root and the union is that single finding set — **byte-identical to today's single-detector run**.
-
-The detector emits TSV per run: a header then one finding per stack — columns `stack  signal  convention  manifestPin  domainSkills  flag  versionFile`. Consume each finding (across the union) as the **seed** for the interview's stack-derived defaults and for the plan's recorded entries:
-
-- `convention` → seeds the best-practice convention note (→ `conventions.md` anchors).
-- `manifestPin` → seeds the framework + version pin (→ `library-manifest.md#Runtime & frameworks`).
-- `domainSkills` → the `driver.json#domainSkills` candidate (a JSON-array literal, or **empty** for an unmapped stack — the detector omits rather than fabricates; an empty field stays a recorded "none", never an invented skill).
-- `stack` (the **descriptive** column value) → the `driver.json#stack` **enum** (`node|python|dotnet|maui|rust|plugin|none`). Map the detector's descriptive label to the enum by this fixed table — key on the literal `stack`-column value:
-
-  | detector `stack` column | `driver.json#stack` enum |
-  |---|---|
-  | `Node (generic)` | `node` |
-  | `Angular (Node)` | `node` |
-  | `Next.js (Node)` | `node` |
-  | `React (Node)` | `node` |
-  | `Vue (Node)` | `node` |
-  | `Svelte (Node)` | `node` |
-  | `Node ([TBD])` (malformed package.json) | `node` |
-  | `Python (<framework>)` (e.g. `Python (FastAPI)`, `Python (Django)`, `Python (Flask)`) | `python` |
-  | `Python` (framework unresolved, flagged) | `python` |
-  | `.NET (non-MAUI)` | `dotnet` |
-  | `.NET MAUI` | `maui` |
-  | `Rust` | `rust` |
-  | `Claude Code plugin` | `plugin` |
-  | `none` | `none` |
-  | `(multi-stack)` | **not mapped** — this is the existing `flag = human` ambiguous-primary row; the human confirms the primary stack (the per-stack rows below it still map individually). |
-
-- `versionFile` → the `driver.json#stackVersionFile` candidate — the version-file PATH the detector actually found (e.g. `.nvmrc`, `.node-version`, `.python-version`, `global.json`), or **empty** when no such file exists or the stack has no version-file concept. It is a PATH, never a resolved concrete version (setup-* actions read the version from the file on the runner). Empty stays a recorded "none", never a fabricated path.
-- `flag` = the literal `human` → carry that finding into the plan as a `[TBD]` 🔴 (e.g. no recognizable stack signal, an ambiguous primary stack, an unresolved framework). Detection's flagged unknowns are the genuine unknowns — they stay `[TBD]` 🔴, never guessed.
-
-Detection **seeds** the defaults the interview confirms; the **resolved** value (what the human accepted/edited at Step 1) is what reaches the plan — this resolved-wins rule covers `stack` and `stackVersionFile` exactly as it does the sibling keys. Where detection and the interview disagree, the interview answer wins (the human confirmed it).
+Detection **seeds** the defaults; the interview's confirmed answer reaches the plan — this resolved-wins rule covers `stack`/`stackVersionFile` like the sibling keys.
 
 ### Step 3 — Inspect the repo (adopt-or-init: a read-only delta)
 
-Determine whether this is a **fresh** repo (bootstrap from empty) or an **existing** repo (plan only the delta). This is a **read** against current state — it makes no write to compute the delta ([BRIEF.md:67](../../BRIEF.md); `SPEC.md` §4.4):
+Determine whether this is a **fresh** repo (bootstrap from empty) or an **existing** repo (plan only the delta) ([BRIEF.md:67](../../BRIEF.md); `SPEC.md` §4.4):
 
 | Signal read (read-only) | Tells the plan |
 |---|---|
-| `<projectDocs>/` docs present? (per-doc, per-anchor — a `[TBD]` anchor counts as **not present**) | Which §A doc entries are "would populate" vs "already present (no change)". |
-| `.milestone-config/driver.json` / `feeder.json` keys present? (read at Step 0) | Which §B config keys are "would add" vs "already present (no change)" vs "would change" (value differs). |
-| Existing branches / labels / branch protection / CI workflow — read **only where the Step 0 precondition allows** a read-only `gh` / `git` query | Which §B suite-readiness entries are "would create" vs "already present". When the precondition blocks the read, record the entry's reconcile state as unknown-pending-precondition and flag it 🔴 rather than guessing it absent. |
-| App layout — already resolved/confirmed in Step 2 (the layout inspection that discovers where `package.json` / `*.csproj` / `pyproject.toml` / `src/` live runs **ahead of** the per-root detector). | Re-states the `appRoots` resolved in Step 2 as part of the read-only reconcile — it confirms, it does **not** re-discover. Repo-root signals → `["."]` (single-root, the default); signals nested under `siteroot/web`, `siteroot/api`, etc. → those paths. The resolved `appRoots` already drove the per-root detection (Step 2) and drives the baked globs (Step 4). |
+| `<projectDocs>/` docs present? (per-doc, per-anchor — a `[TBD]` anchor counts as **not present**) | Which §A entries are "would populate" vs "already present". |
+| `.milestone-config/driver.json` / `feeder.json` keys present? (read at Step 0) | Which §B keys are "would add", "already present", or "would change" (differs). |
+| Existing branches/labels/branch protection/CI workflow (read-only `gh`/`git`, only where Step 0's precondition allows) | Which §B entries are "would create" vs "already present"; if blocked, flag 🔴 unknown-pending-precondition rather than guessing absent. |
+| App layout — resolved/confirmed in Step 2 | Re-states the resolved `appRoots` in the read-only reconcile — confirms, does not re-discover (`references/nested-app-roots.md`). |
 
 Map each entry's current-vs-planned state onto the `SPEC.md` §4.4 **reconcile class**:
 
-- **fresh repo** (no `<projectDocs>/`, no `.milestone-config/*` keys): every entry is a create/populate — §A docs are `human-owned` (first `apply` writes the captured content onto an empty/placeholder doc), §B config keys / labels / branches / CI are `add`, protection is `patch`. The plan states the repo is being bootstrapped from empty.
-- **existing repo**: distinguish `no-op` (target already matches the captured value) from `add` (target absent) from `patch` (target exists, value differs) from `human-owned` (a human-maintained doc — propose, never overwrite). The human sees only the delta; a fully-synced repo resolves to an all-`no-op` plan (`SPEC.md` §4.4).
-
-`plan` reads existing state to compute this and still **writes nothing**.
+- **fresh repo** (no `<projectDocs>/`, no `.milestone-config/*` keys): every entry is create/populate — §A docs `human-owned` (first `apply` writes onto an empty doc), §B config keys/labels/branches/CI `add`, protection `patch`.
+- **existing repo**: `no-op` (matches), `add` (absent), `patch` (differs), or `human-owned` (human-maintained doc — propose, never overwrite); the human sees only the delta (a fully-synced repo is all-`no-op`, `SPEC.md` §4.4).
 
 ### Step 4 — Compose the entries through the doc/config mapping (#7)
 
-Compose Step 1's interview answers + Step 2's detected signals into the plan's two job sections, using the mapping `docs/write-project-docs.md` defines (the compose-from-#3-+-#4 contract). `plan` **records** the composed entries into the plan file; it does **not** call the writer — running the writer is `apply`'s job, not `plan`'s.
+Compose Step 1's answers + Step 2's signals into the plan's two job sections, per `docs/write-project-docs.md`'s mapping. `plan` **records** the entries — running the writer is `apply`'s job.
 
-**Section A — project-docs population (Job 1, the core)** — one entry per standing doc (`SPEC.md` §5). Key each captured answer by its `##` anchor (the fixed map at `docs/understanding-interview.md` §2 — do not re-derive it). Each entry carries the four §4.2 per-entry fields: **Target** (the doc path), **Captured value** (the real, cited understanding — never a scaffolded placeholder), **Reconcile class** (default `human-owned` for project docs — propose, never overwrite — except a first `apply` onto an empty/placeholder doc), **State** (`captured` / `none` / `[TBD]` 🔴). A doc whose understanding the interview could not resolve carries `[TBD]` 🔴; a doc that does not apply (e.g. `design-system.md` for a backend-only repo) carries `none` (`SPEC.md` §5).
+**Section A — project-docs population (Job 1, the core)** — one entry per standing doc (`SPEC.md` §5), keyed by its `##` anchor (§2). Four §4.2 fields: **Target** (doc path), **Captured value** (real, cited, never a placeholder), **Reconcile class** (default `human-owned` — propose, never overwrite, except a first `apply` onto an empty doc), **State** (`captured`/`none`/`[TBD]` 🔴 — `none` for a doc that doesn't apply, e.g. `design-system.md` backend-only).
 
-**Bake the app-roots into the emitted globs (root-absolute, at scaffold time).** Before recording `sourceGlobs` / `uiSurfaceGlobs`, **prefix each app-root onto that root's globs** so every persisted glob is **root-absolute** (`SPEC.md` §4.1 `appRoots`, §6.1). For each `appRoots` entry `R` and each base glob `G` that root contributes, derive the emitted glob in this **fixed order — normalize, then no-op test, then join**:
+**Bake the app-roots into the emitted globs (root-absolute, at scaffold time)** — prefix each app-root onto that root's `sourceGlobs`/`uiSurfaceGlobs` (`SPEC.md` §4.1, §6.1). Default `["."]` is a no-op — globs unchanged (no-regression guarantee, §4.1). For nested/multi-root `appRoots`, see `references/nested-app-roots.md`.
 
-1. **Normalize `R` first.** Strip any single trailing slash (`siteroot/web/` → `siteroot/web`).
-2. **No-op test on the normalized `R`.** Treat `"."`, `"./"`, and `""` (empty) as the **same no-op sentinel** — after step 1 they all normalize to `"."` or `""`. A no-op sentinel emits `G` **unchanged** (never `./G`, never a leading or doubled separator).
-3. **Join only a real nested root.** Any `R` that is **not** the no-op sentinel (e.g. `siteroot/web`) emits `R/G` — a single `/` separator between the normalized root and the base glob.
+**Section B — suite-readiness (Job 2, supporting)** — record only non-default/create-if-missing entries (`SPEC.md` §6). Configs are machine-owned, never `human-owned` (`SPEC.md` §6.1); **no `appRoots` key is ever written** (plan-file-only, `SPEC.md` §4.1, §6.1).
 
-The persisted glob set is the **union** of every app-root's emitted globs:
-
-| `appRoots` | base glob | emitted (recorded) glob |
+| Entry | Detail | Reconcile |
 |---|---|---|
-| `["."]` / `["./"]` / `[""]` (default / single-root) | `skills/**` | `skills/**`  ← **no-op sentinel; NEVER `./skills/**` or `//skills/**`** |
-| `["siteroot/web"]` (or `["siteroot/web/"]`) | `src/**` | `siteroot/web/src/**`  ← **single separator** |
-| `["siteroot/web", "siteroot/api"]` | `src/**` (web), `**/*.cs` (api) | `siteroot/web/src/**`, `siteroot/api/**/*.cs` (union) |
+| `integrationBranch` / `protectedBranch` | branch model | `add` |
+| `sourceGlobs` / `uiSurfaceGlobs` (or `none`) | root-absolute, app-root-prefixed (above) | `add`/`patch` |
+| `unitTestCmd` / `preflightCmd` / `e2eEnv` (or `none`) | detected | `add` |
+| `domainSkills` / `nonNegotiables` | deduped **union** across app-roots (§2 detection / §A capture) | `add` |
+| `stack` / `stackVersionFile` | §2 detection enum / `versionFile` column (PATH, omitted if empty) | `add` |
+| `versioning` | Tier 6 — **DUAL-WRITE**: `driver.json#versioning` **boolean** (emits only `false`; omitted=versioned); `feeder.json#versioning` **string enum** `"semver"` \| `"none"` (`milestone-feeder/docs/profile-schema.md:52`). Versioned → omit/`"semver"`; non-versioned → `false`/`"none"`; skipped/`[TBD]` → omit both. | `add`/`patch` |
+| `feeder.json#projectDocs` / `reviewer` | when non-default | `add` |
+| Version-file / bump target (Tier 6) | `captured` (`.claude-plugin/plugin.json`) plugin repo; `none` for `versioning: none`; **`[TBD]` 🔴** non-plugin w/ no version file resolved ([BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2). | `human-owned` |
+| Label taxonomy | One entry per label, from the authoritative set (`SPEC.md` §6.3). | `add` |
+| Branch model | One entry per branch (integration, protected) + default-branch policy; never delete (`SPEC.md` §6.3). | `add` |
+| Branch protection | No direct push, PR required, CI status check required, optional review. **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | `patch` |
+| CI workflow | `.github/workflows/` path running `unitTestCmd`/`preflightCmd` on PRs into the integration branch, the required check. **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | `add`/`patch` |
 
-Because normalization runs **before** the no-op test, every spelling of "the repo root" (`"."`, `"./"`, `""`) collapses to the same no-op sentinel and emits the base glob unchanged — there is no trailing-slash form that escapes the no-op into a `./skills/**` join. The baking happens **here, where `plan` assembles the glob values** — the persisted globs are ordinary strings; the config writers (`scripts/write-{driver,feeder}-config.*`) take them verbatim and **re-derive nothing** (their headers: opaque persisters), so they need **no `appRoots` key**. `uiSurfaceGlobs` is baked the same way (or stays `none` for a non-UI repo). Because the no-op sentinel emits the base glob unchanged, a **default / single-root** plan records the **exact globs it would have without any `appRoots` field** — the no-regression guarantee (`SPEC.md` §4.1).
-
-**Section B — suite-readiness (Job 2, supporting)** — record **only non-default keys / create-if-missing entries** (`SPEC.md` §6 — minimal, consumer-driven; a key at its default is omitted):
-
-| Sub-section | Entries recorded | Source |
-|---|---|---|
-| Configs (`driver.json` / `feeder.json` non-default keys) | `integrationBranch` / `protectedBranch` (branch model), `sourceGlobs`, `uiSurfaceGlobs` (or `none`) — **recorded root-absolute, app-root-prefixed per the baking rule above**, `unitTestCmd` / `preflightCmd` (detected), `e2eEnv` (or `none`), **`domainSkills`** (the deduped **union** across app-roots, from the §2 per-root detection / §A best-practice capture), **`nonNegotiables`** (the hard-constraint capture — the deduped **union** across app-roots, same provenance as `domainSkills`: the §2 per-root detection / §A best-practice capture), **`stack`** (the resolved enum mapped from the §2 detection per the table above) and **`stackVersionFile`** (the version-file PATH from the §2 `versionFile` column — omitted when empty), **`versioning`** (from Tier 6 — **DUAL-WRITE**: the SINGLE Tier-6 answer maps to BOTH the boolean `driver.json#versioning` AND the string-enum `feeder.json#versioning`, per the mapping below), `feeder.json#projectDocs` / `reviewer` when non-default. Configs are machine-owned → reconcile class `add` (key absent) or `patch` (value changed), never `human-owned` (`SPEC.md` §6.1). **No `appRoots` key is written** — it is a plan-file-only field (`SPEC.md` §4.1, §6.1). | Steps 1–2 × `appRoots` |
-
-> **Tier-6 versioning is a DUAL-WRITE — one answer, two keys.** The single Tier-6 versioning answer routes to BOTH config keys, which have DISTINCT types and consumers: the driver's `driver.json#versioning` is **boolean** (consumed by the driver's version-bump/extraction; the writer emits only `false`), while the feeder's `feeder.json#versioning` is the **string enum** `"semver"|"none"` (the feeder's read-contract key, `milestone-feeder/docs/profile-schema.md:52`). The mapping:
-> - **versioned** → `driver.json#versioning` OMITTED (driver default is versioned) / `feeder.json#versioning: "semver"`.
-> - **non-versioned** → `driver.json#versioning: false` / `feeder.json#versioning: "none"`.
-> - **skipped / [TBD]** → OMIT `versioning` from feeder.json (the feeder infers-or-asks) AND keep the driver key's existing unset-sentinel behavior — **never a placeholder in either file**.
-| Version-file / bump target | One entry for *where* the version lives. `captured` (`.claude-plugin/plugin.json`) for a plugin repo; `none` for a `versioning: none` project; **`[TBD]` 🔴 when the repo is non-plugin and no version file resolved** — the recorded brief caveat (the driver's bump target is `.claude-plugin/plugin.json` today; a non-plugin version file may need it generalized — [BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2), carried explicitly rather than silently dropped. | Tier 6 |
-| Label taxonomy | One create-if-missing entry per label — enumerate each by name in the plan file from the authoritative set (`SPEC.md` §6.3); reconcile class `add`. | `SPEC.md` §6.3 |
-| Branch model | One entry per branch (integration, protected) to create-if-missing + the default-branch policy. By name; `add`; never delete (`SPEC.md` §6.3). | branch model |
-| Branch protection | The protected-branch rules: no direct push, PR required, CI status check required, optional review. Targeted by branch name; `patch`. **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | branch model |
-| CI workflow | The GitHub Actions workflow path under `.github/workflows/` running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration branch, registered as the required status check; `add` (absent) / `patch` (drifted). **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | stack detection |
-
-Apply each entry's reconcile class + state from the Step 3 adopt-or-init delta. Record the **safe write order** (`SPEC.md` §7) in the plan so `apply` deploys consequential changes after their prerequisites: 1) project docs, 2) configs, 3) labels, 4) branch model → branch protection → CI workflow.
+Apply each entry's reconcile class + state from the Step 3 delta. Record the **safe write order** (`SPEC.md` §7): 1) project docs, 2) configs, 3) labels, 4) branch model → protection → CI.
 
 ### Step 5 — Assemble + write the plan file
 
-Derive the **deterministic slug** from the one-line project / milestone goal (the same algorithm the feeder uses — `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5 (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path; re-running `plan` against the same goal resolves to the **same path** and overwrites it with equivalent content — no second divergent file.
+Derive the **deterministic slug** from the one-line goal (`SPEC.md` §2.2, the feeder's algorithm): lowercase, collapse non-alphanumeric runs to a hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5. Re-running `plan` on the same goal overwrites the same path — never a second divergent file.
 
 Set the **plan-level status line** (`SPEC.md` §4.1): `READY` when every section is resolved or recorded `none`; `FLAGGED` when one or more 🔴 `[TBD]` fields (or 🔴 blocked-on-precondition entries) remain.
 
@@ -204,76 +130,13 @@ Write the reviewable plan file to the per-run scratch path (`SPEC.md` §2.1):
 .milestone-bootstrapper/plan-<slug>.md
 ```
 
-`.milestone-bootstrapper/` is the tool-namespaced, per-clone scratch directory — it **should be gitignored** (per-run scratch, reviewed then deployed, never committed; the suite's `.gitignore` already carries `.milestone-feeder/` and `.milestone-driver-*` — `.milestone-bootstrapper/` is the analog). `plan` writes the file there **regardless** of whether `.gitignore` yet carries the pattern; this skill does not edit `.gitignore` (the consuming `apply` / `update` skills own that). Write the file as **BOM-free UTF-8 with LF line endings and a single trailing newline** (the suite's script convention).
+`.milestone-bootstrapper/` is the tool-namespaced, per-clone scratch directory — **should be gitignored** (analog to `.milestone-feeder/`/`.milestone-driver-*`), but `plan` writes there regardless and doesn't edit `.gitignore` (`apply`/`update` own that). Write **BOM-free UTF-8, LF endings, single trailing newline**.
 
-Write the file in the **`SPEC.md` §8 shape** — the fields (§4) are the contract; this layout is one faithful rendering of them:
+Write the file in the **`SPEC.md` §8 shape** (§4 fields are the contract) — see `references/plan-file-skeleton.md`.
 
-```markdown
-# Provisioning plan — <one-line project goal>
+Every §A/§B entry carries all four §4.2 fields (Target / Captured value / Reconcile class / State) — missing any fails malformed-plan detection (`SPEC.md` §3, §4.2). Keep `none` (recorded decision) and `[TBD]` 🔴 (flagged unknown) distinct — never collapse them (`SPEC.md` §4.3).
 
-- Slug: <kebab-case-slug>
-- Source brief: <inline | file:<path>>          # the bootstrapper's brief is the project's own intent — no `epic #<n>` form
-- Status: READY                                  # READY | FLAGGED (🔴 TBDs / precondition blocks remain)
-- Project-docs path: <projectDocs, e.g. .project/>
-- App-roots: ["."]                               # ["."] = repo root is the app root (default). Nested: ["siteroot/web","siteroot/api"] — globs below are baked root-absolute from these
-
-## A. Project docs
-| Doc | State | Reconcile | Captured understanding |
-|-----|-------|-----------|------------------------|
-| design-philosophy.md | captured    | human-owned | <cited stance / layering / what we optimize for / one-way doors / error & testing philosophy> |
-| library-manifest.md  | captured    | human-owned | <stack + versions, cited; mandated packages; the dependency gate; avoid/banned> |
-| environment.md       | captured    | human-owned | <stores + test-data isolation; caching=none; async; external services; runtime/hosting> |
-| conventions.md       | captured    | human-owned | <stack best-practice idioms + naming/layout/test patterns + versioning policy> |
-| design-system.md     | none        | human-owned | not applicable (backend-only)        # or captured, for a UI project
-| tokens.json          | none        | human-owned | not applicable (backend-only)        # or captured, for a UI project
-
-## B. Suite-readiness
-### Configs (non-default keys)
-| Key | State | Reconcile | Value |
-|-----|-------|-----------|-------|
-| driver.json#integrationBranch | captured | add   | <branch>            # recorded only when non-default
-| driver.json#domainSkills      | captured | add   | <from detection / best-practice capture>
-| driver.json#nonNegotiables    | captured | add   | <hard-constraint capture; string[]>   # same provenance as domainSkills
-| driver.json#versioning        | captured | patch | boolean — `false` = version-free; omitted = versioned   # driver key is BOOLEAN-only (writer emits only `false`)
-| feeder.json#versioning        | captured | add   | `"semver"` \| `"none"`   # Tier-6 routing → the feeder's string-enum read-contract key
-| driver.json#sourceGlobs       | captured | patch | <root-absolute globs>   # baked from appRoots; ["."] no-op → e.g. ["skills/**"]; nested → ["siteroot/web/**","siteroot/api/**"]
-| feeder.json#projectDocs       | captured | add   | <path>              # only when non-default
-
-### Version-file / bump target
-| Target | State | Reconcile | Value |
-|--------|-------|-----------|-------|
-| version file | captured | human-owned | .claude-plugin/plugin.json   # or [TBD] 🔴 for a non-plugin repo with no resolved version file (BRIEF.md:38); or none for versioning:none
-
-### Labels (create-if-missing)
-| Label | State | Reconcile |
-|-------|-------|-----------|
-| needs design | captured | add |
-| risk:heavy   | captured | add |
-| …            | …        | …   |
-
-### Branch model · protection · CI
-| Target | State | Reconcile | Value |
-|--------|-------|-----------|-------|
-| branch: <integration>            | captured  | add   | integration branch |
-| branch: <protected>              | captured  | no-op | already the protected branch |
-| protection: <protected>          | captured  | patch | PR required; CI check required; no direct push   # 🔴 blocked-on-precondition when gh failed Step 0
-| .github/workflows/ci.yml         | captured  | add   | runs <unitTestCmd> on PRs into <integration>     # 🔴 blocked-on-precondition when gh failed Step 0
-
-## Write order
-1. project docs  2. configs  3. labels  4. branch → protection → CI
-
-## Grounding & flags
-- <each captured understanding> — grounded in <interview tier / detected signal / .project/<doc>.md#<section>>
-- Adopt-or-init: <"fresh repo — bootstrapped from empty" | "existing repo — only the delta is planned">
-- 🔴 <each [TBD] genuine unknown and its consequence>; <each blocked-on-precondition entry and the scope it needs>   # "none" when nothing is flagged
-
----
-This plan file is the build artifact — review it, then run `/milestone-bootstrapper:apply` to deploy it (it writes the project docs, the configs, the labels, the branch model, the protection, and the CI in the recorded write order). `update` reconciles a refreshed plan onto an already-bootstrapped repo, diff-first and non-destructive. `plan` wrote no project-docs, no config, no label, no branch, no protection, no CI, and no GitHub state of any kind.
-```
-
-Every §A / §B entry carries all four §4.2 per-entry fields (Target / Captured value / Reconcile class / State) — a consumer that finds an entry missing any of the four fails malformed-plan detection (`SPEC.md` §3, §4.2). Keep `none` and `[TBD]` 🔴 distinct on every entry: `none` is a recorded decision ("we know — the answer is nothing"); `[TBD]` 🔴 is a flagged genuine unknown ("a human must decide"). Never collapse one into the other (`SPEC.md` §4.3).
-
-The plan file is local scratch. **Nothing is written to `.project/`, `.milestone-config/*`, branches, branch protection, labels, or CI; no milestone, issue, label, comment, branch, or protection rule is created on GitHub.** The `apply` skill is the only thing that executes the plan; `update` reconciles a refreshed one.
+The plan file is local scratch — nothing else is written, no GitHub state of any kind created. `apply` is the only verb that executes it; `update` reconciles a refreshed one.
 
 ## Output style
 
