@@ -89,7 +89,7 @@ milestone goal, derived by the **same algorithm the feeder uses**
 2. Lowercase it.
 3. Replace every run of non-alphanumeric characters with a single hyphen.
 4. Strip any leading / trailing hyphen.
-5. Cap the length at a reasonable bound, trimming a trailing hyphen if the cut lands
+5. Cap the length at 60 characters, trimming a trailing hyphen if the cut lands
    on one.
 
 **The same brief always resolves to the same path; a changed brief derives a
@@ -219,6 +219,7 @@ a first `apply` onto an empty / placeholder doc, which writes the captured conte
 | `conventions.md` | The best-practice conventions that **follow** from each stack choice (e.g. Pydantic models, DI pattern, async I/O, router layout for FastAPI); naming, layout, test patterns; the versioning policy + bump cadence ([BRIEF.md:35,38](BRIEF.md)). | `human-owned` |
 | `design-system.md` | Tokens, components, layout, required states — **UI projects only**; `none` for backend-only repos ([BRIEF.md:39](BRIEF.md)). | `human-owned` |
 | `tokens.json` | Machine-readable design tokens — **UI projects only**; `none` for backend-only repos ([BRIEF.md:39](BRIEF.md)). | `human-owned` |
+| `config-catalog.md` | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, **never values** ([`project-docs/SPEC.md` §2](project-docs/SPEC.md)). | `human-owned` |
 
 **Captured value = the real, cited understanding** — not a scaffolded placeholder
 ([BRIEF.md:41,66](BRIEF.md)). Population, not scaffolding, is the whole consistency
@@ -355,6 +356,7 @@ this Markdown layout is one faithful rendering of them.
 | conventions.md       | captured    | human-owned | <stack idioms + versioning policy> |
 | design-system.md     | none        | human-owned | not applicable (backend-only) |
 | tokens.json          | none        | human-owned | not applicable (backend-only) |
+| config-catalog.md    | captured    | human-owned | <config/secret key norms, cited> |
 
 ## B. Suite-readiness
 ### Configs (non-default keys)

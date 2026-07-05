@@ -5,9 +5,9 @@ description: This skill should be used when the user invokes "/milestone-bootstr
 
 # update — reconcile a refreshed plan onto an already-bootstrapped repo (diff-first, propose human-owned, non-destructive)
 
-Refresh the plan file `plan` wrote for this project (same deterministic slug), then reconcile it onto the live repo: diff each entry against live state, **PATCH** drifted configs (diff first), **ADD** what's new since the last `apply`, **PROPOSE** — never overwrite — human-owned `.project/` doc edits, and **FLAG 🔴** — never delete — anything absent from the refresh. Where `apply` deploys onto a fresh repo, `update` re-deploys onto one that already exists — the **architecture-changed path is first-class** ("we adopted Redis", "switched the ORM"): the human re-runs `plan`, then `update` reconciles the delta.
+Refresh the plan file `plan` wrote for this project (same deterministic slug), then reconcile it onto the live repo, diffing each entry against live state per the frontmatter's PATCH/ADD/PROPOSE/FLAG contract. Where `apply` deploys onto a fresh repo, `update` re-deploys onto one that already exists — the **architecture-changed path is first-class** ("we adopted Redis", "switched the ORM"): the human re-runs `plan`, then `update` reconciles the delta.
 
-The **plan file is the source of truth** (`SPEC.md` §1); `update` is **idempotent** (a fully-synced repo is a true no-op, §4.4) and reconciles onto an **already-bootstrapped** repo only — the inverse of `apply`'s first-deploy branch (no `.project/` + no `.milestone-config/` → 🔴 error-and-stop, Step 1). It **reuses `apply`'s provisioning units by reference — no second definition** (Non-negotiables). **No flags** (`BRIEF.md:64`); authors no application code, opens no PRs.
+The **plan file is the source of truth** (`SPEC.md` §1); `update` is **idempotent** (a fully-synced repo is a true no-op, §4.4) and reconciles onto an **already-bootstrapped** repo only — the inverse of `apply`'s first-deploy branch (no `.project/` + no `.milestone-config/` → 🔴 error-and-stop, Step 1). Full Non-negotiables below.
 
 ## Announce first
 
@@ -63,7 +63,7 @@ $haveCfg  = (Test-Path -LiteralPath $cfg)  -and ((Get-ChildItem -LiteralPath $cf
 
 ### Step 2 — Resolve / refresh the plan file for the project
 
-Derive `<slug>` **deterministically** from the one-line project goal — same algorithm `plan`/`apply` use (`SPEC.md` §2.2): lowercase, hyphenate non-alphanumeric runs, strip leading/trailing hyphens, cap the length. The same goal always resolves to `.milestone-bootstrapper/plan-<slug>.md`.
+Derive `<slug>` **deterministically** from the one-line project goal — same algorithm `plan`/`apply` use (`SPEC.md` §2.2): lowercase, hyphenate non-alphanumeric runs, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5. The same goal always resolves to `.milestone-bootstrapper/plan-<slug>.md`.
 
 | Resolution | Action |
 |---|---|
@@ -216,5 +216,6 @@ Be concise — report status and outcomes flatly, no wall-of-text. Present the p
 - **Non-destructive by construction.** Never delete a branch, config key, doc/anchor, or label; never overwrite a human doc; never remove a live-only target — flagged 🔴 instead (Step 5). Re-asserting protection is the one allowed re-assertion (merge-UP).
 - **Idempotent — a fully-synced repo is a TRUE NO-OP.** Nothing drifted/new/differing/live-only → zero writes and a no-op line; a re-run is a no-op by construction (`SPEC.md` §4.4).
 - **Three distinct states, never collapsed** — `captured` reconciles; `none` is a reported no-op; `[TBD]` 🔴 is re-surfaced and left unwritten, never fabricated (`SPEC.md` §4.3).
+- **Cannot collapse an existing `feeder.json` back to `{}`.** The feeder config writer never emits `{}` and never deletes an existing file (issue #77's non-destructive contract) — so resetting the last non-default feeder key to its default leaves the prior `feeder.json` in place, byte-unchanged, not emptied (Step 4 (2)).
 - **The `gh` precondition is surfaced, never silent.** Local reconcile runs regardless; remote reconcile (labels, branches, CI, protection — the last needing repo-admin) is 🔴 blocked-on-precondition when `gh` auth/scope is missing (`BRIEF.md:82`).
 - **No flags. Authors no application code, opens no PRs.** The reconcile verb of the plan/apply/update trio — nothing to argument-parse (`BRIEF.md:64`).

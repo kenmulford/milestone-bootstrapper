@@ -9,6 +9,19 @@
 # setup table VERBATIM (milestone-driver/skills/setup/SKILL.md:39-49) — the single
 # source; this script does not invent a drifting copy.
 #
+# GUARDRAIL EXEMPTION — ruby domainSkills (tracked divergence): the `Ruby (Rails)`
+# and `Ruby (generic)` findings' domainSkills value (`["ruby-lsp",
+# "superpowers:test-driven-development","superpowers:systematic-debugging"]`) is a
+# deliberate, tracked divergence from the VERBATIM-mirror invariant above — this
+# value is CONFIRMED ABSENT from the driver's own Stack->domainSkills table today
+# (milestone-driver/skills/setup/SKILL.md:39-49). The reason is a source-repo
+# boundary: updating milestone-driver's own table is out of scope for a
+# milestone-bootstrapper PR. Reconcile by adding the Ruby row to milestone-driver's
+# skills/setup/SKILL.md Stack->domainSkills table in a follow-up PR against that
+# repo. The invariant above still governs EVERY OTHER stack's domainSkills value
+# against table parity; do NOT extend this exemption to any other stack.
+# Resolves #104 (ruby detection — decided: exempt + track, not cross-repo edit).
+#
 # Contract:
 #   - One TSV row per finding (flat/tabular suite output style).
 #   - Genuine unknowns -> [TBD] + flagged for a human (suite DNA: prefix the
@@ -27,10 +40,11 @@
 #          flag is the literal string "human" for rows needing a human, else "".
 #          versionFile is the repo-relative version-file PATH actually found for
 #          this stack (node -> .nvmrc else .node-version; python -> .python-version;
-#          .NET / MAUI -> global.json), or EMPTY when no such file exists or the
-#          stack has no version-file concept. Never a resolved concrete version —
-#          setup-* actions read the version from the file on the runner. Never a
-#          fabricated path (flag-don't-guess): empty when the file is absent.
+#          ruby -> .ruby-version; .NET / MAUI -> global.json), or EMPTY when no such
+#          file exists or the stack has no version-file concept. Never a resolved
+#          concrete version — setup-* actions read the version from the file on
+#          the runner. Never a fabricated path (flag-don't-guess): empty when the
+#          file is absent.
 # Requires: jq preferred for package.json parsing. When jq is absent, the Node
 #          block falls back to a grep-based Angular check (parity with the pwsh
 #          twin's built-in JSON parse) — jq-absent is NOT treated as malformed
@@ -272,6 +286,39 @@ if [ -f "$repo/Cargo.toml" ]; then
     "Rust: edition pinned, modules over files, Result/error-enum conventions, clippy clean" \
     "Rust $TBD (pin edition / toolchain)" \
     "" ""
+fi
+
+# ---------------------------------------------------------------------------
+# Ruby — Gemfile (+ Rails discrimination)
+# ---------------------------------------------------------------------------
+if [ -f "$repo/Gemfile" ]; then
+  app_stacks+=("ruby")
+  ruby_verfile="$(version_file '.ruby-version')" || ruby_verfile=""
+  # domainSkills is the SAME bundle for both Rails and generic Ruby — language-
+  # level tooling, not Rails-specific. See the GUARDRAIL EXEMPTION above (header)
+  # for why this value diverges from the driver's own Stack->domainSkills table.
+  ruby_skills='["ruby-lsp","superpowers:test-driven-development","superpowers:systematic-debugging"]'
+  # Framework hint from a dependency line (best-effort, grep — Gemfile has no
+  # jq). Mirrors the Python block's grep-based framework-discrimination idiom
+  # above; case-insensitivity is handled entirely by grep -i on the file
+  # content, so no shell-level case folding is used (bash-3.2 safe).
+  if grep -qiE '(^|[^a-z])rails([^a-z]|$)' "$repo/Gemfile" 2>/dev/null; then
+    # Rails resolved -> the version pin stays [TBD] for the interview to
+    # confirm; that is an expected state, not a genuine unknown, so it is NOT
+    # flagged (parity with Node/.NET/Python pins).
+    emit_finding "Ruby (Rails)" "Gemfile" \
+      "Rails: MVC layout (app/models, app/controllers, app/views), ActiveRecord migrations, config/routes.rb, convention over configuration" \
+      "Ruby $TBD; Rails $TBD (pin version)" \
+      "$ruby_skills" "" "$ruby_verfile"
+  else
+    # Plain Ruby is itself a valid, fully-resolved answer, not a genuine unknown
+    # (per .project/design-philosophy.md#Error & failure philosophy) — NOT
+    # flagged/[TBD]-as-unresolved, mirroring generic Node's plain blurb.
+    emit_finding "Ruby (generic)" "Gemfile" \
+      "Ruby: Bundler-managed Gemfile, RuboCop-style formatting conventions" \
+      "Ruby $TBD (pin version)" \
+      "$ruby_skills" "" "$ruby_verfile"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
