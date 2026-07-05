@@ -120,7 +120,7 @@ Apply each entry's reconcile class + state from the Step 3 delta. Record the **s
 
 ### Step 5 — Assemble + write the plan file
 
-Derive the **deterministic slug** from the one-line goal (`SPEC.md` §2.2, the feeder's algorithm): lowercase, collapse non-alphanumeric runs to a hyphen, strip leading/trailing hyphens, cap the length. Re-running `plan` on the same goal overwrites the same path — never a second divergent file.
+Derive the **deterministic slug** from the one-line goal (`SPEC.md` §2.2, the feeder's algorithm): lowercase, collapse non-alphanumeric runs to a hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5. Re-running `plan` on the same goal overwrites the same path — never a second divergent file.
 
 Set the **plan-level status line** (`SPEC.md` §4.1): `READY` when every section is resolved or recorded `none`; `FLAGGED` when one or more 🔴 `[TBD]` fields (or 🔴 blocked-on-precondition entries) remain.
 

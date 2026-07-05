@@ -73,7 +73,7 @@ $haveCfg  = (Test-Path -LiteralPath $cfg)  -and ((Get-ChildItem -LiteralPath $cf
 
 ### Step 2 — Resolve / refresh the plan file for the project
 
-Derive `<slug>` **deterministically** from the one-line project goal, using the **same algorithm `plan` / `apply` use** (`skills/plan/SKILL.md` Step 5; `skills/apply/SKILL.md` Step 1; `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length at the same bound (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path:
+Derive `<slug>` **deterministically** from the one-line project goal, using the **same algorithm `plan` / `apply` use** (`skills/plan/SKILL.md` Step 5; `skills/apply/SKILL.md` Step 1; `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5 (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path:
 
 ```
 .milestone-bootstrapper/plan-<slug>.md
