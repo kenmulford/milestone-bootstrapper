@@ -89,7 +89,7 @@ milestone goal, derived by the **same algorithm the feeder uses**
 2. Lowercase it.
 3. Replace every run of non-alphanumeric characters with a single hyphen.
 4. Strip any leading / trailing hyphen.
-5. Cap the length at a reasonable bound, trimming a trailing hyphen if the cut lands
+5. Cap the length at 60 characters, trimming a trailing hyphen if the cut lands
    on one.
 
 **The same brief always resolves to the same path; a changed brief derives a

@@ -50,7 +50,7 @@ The precondition gates only the *remote-dependent* steps' deployability — it n
 
 ### Step 1 — Resolve the provisioning plan file
 
-Derive `<slug>` **deterministically** from the one-line project goal, using the **same algorithm `plan` uses** (`skills/plan/SKILL.md` Step 5; `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length at the same bound (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path:
+Derive `<slug>` **deterministically** from the one-line project goal, using the **same algorithm `plan` uses** (`skills/plan/SKILL.md` Step 5; `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5 (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path:
 
 ```
 .milestone-bootstrapper/plan-<slug>.md

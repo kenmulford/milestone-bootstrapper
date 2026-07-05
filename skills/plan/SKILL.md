@@ -194,7 +194,7 @@ Apply each entry's reconcile class + state from the Step 3 adopt-or-init delta. 
 
 ### Step 5 — Assemble + write the plan file
 
-Derive the **deterministic slug** from the one-line project / milestone goal (the same algorithm the feeder uses — `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length at a reasonable bound (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path; re-running `plan` against the same goal resolves to the **same path** and overwrites it with equivalent content — no second divergent file.
+Derive the **deterministic slug** from the one-line project / milestone goal (the same algorithm the feeder uses — `SPEC.md` §2.2): lowercase the goal, replace every run of non-alphanumeric characters with a single hyphen, strip leading/trailing hyphens, cap the length per `SPEC.md` §2.2 step 5 (trim a trailing hyphen if the cut lands on one). The same goal always resolves to the same path; re-running `plan` against the same goal resolves to the **same path** and overwrites it with equivalent content — no second divergent file.
 
 Set the **plan-level status line** (`SPEC.md` §4.1): `READY` when every section is resolved or recorded `none`; `FLAGGED` when one or more 🔴 `[TBD]` fields (or 🔴 blocked-on-precondition entries) remain.
 
