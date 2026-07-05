@@ -1,6 +1,6 @@
 ---
 name: apply
-description: This skill should be used when the user invokes "/milestone-bootstrapper:apply", or asks to "apply the plan", "deploy the bootstrap", or "provision the repo from the approved plan". Executes the approved provisioning plan file on the repo — project docs, configs, labels, branch model, CI workflow, and branch protection — in a fixed safe order, by invoking the already-built component scripts. Reads the plan file and deploys exactly it; it does NOT re-interview, re-detect, or re-plan. Ordered and idempotent: a re-run after a partial failure resumes from the first incomplete step. No flags. Authors no application code; opens no PRs.
+description: This skill should be used when the user invokes "/milestone-bootstrapper:apply", or asks to "apply the plan", "deploy the bootstrap", or "provision the repo from the approved plan". Executes the approved provisioning plan file on the repo — project docs, configs, labels, branch model, CI workflow, and branch protection — in a fixed safe order, by invoking the already-built component scripts. Reads the plan file and deploys exactly it; it does NOT re-interview, re-detect, or re-plan. Ordered and idempotent: a re-run after a partial failure resumes from the first incomplete step, as long as every component script remains independently idempotent. No flags. Authors no application code; opens no PRs.
 ---
 
 # apply — deploy the approved provisioning plan to the repo (read-the-plan, faithful, ordered)
@@ -107,7 +107,7 @@ Assert the protected branch's safety floor (no direct push, PR + CI checks requi
 
 ### Step 4 — Idempotency + resume model (no apply-side state ledger)
 
-`apply` carries **no separate state ledger** (issue AC-5; [BRIEF.md:54](../../BRIEF.md)). A re-run re-invokes **every** component in the same safe order; each component **no-ops when its artifact is already present** — so a partial run is resumed simply by **re-running `apply`**: completed steps are skipped (the component finds its artifact already correct and changes nothing) and the run continues from the first incomplete step to completion. Re-asserting branch protection to match the plan is explicitly allowed (idempotent — merge-UP — not destructive; [BRIEF.md:65](../../BRIEF.md)). Idempotency lives in the units, mirroring the feeder create skill's defined idempotent-resume pattern (`create/SKILL.md:166-174`).
+`apply` carries **no separate state ledger** (issue AC-5; [BRIEF.md:54](../../BRIEF.md)). A re-run re-invokes **every** component in the same safe order; each component **no-ops when its artifact is already present** — so a partial run is resumed simply by **re-running `apply`**, as long as every component script remains independently idempotent: completed steps are skipped (the component finds its artifact already correct and changes nothing) and the run continues from the first incomplete step to completion. Re-asserting branch protection to match the plan is explicitly allowed (idempotent — merge-UP — not destructive; [BRIEF.md:65](../../BRIEF.md)). Idempotency lives in the units, mirroring the feeder create skill's defined idempotent-resume pattern (`create/SKILL.md:166-174`).
 
 ### Partial-failure path (halt, name the step, resume on re-run)
 
@@ -120,7 +120,7 @@ If **any single step's component fails mid-run** (e.g. branch-protection fails f
 | **Report what was already written** and what was not (every prior step's writes stay intact). | **Roll back, force-push, or delete** any prior write — never (`SPEC.md` §6.3; [BRIEF.md:65](../../BRIEF.md)). |
 | For a **precondition** failure (insufficient `gh` scope), surface it **🔴** with what to grant. | Silently skip a precondition-blocked step. |
 
-**Resume:** re-running `apply` after a partial failure re-invokes every component in the same safe order; the idempotent units no-op the already-completed steps and the run continues from the first incomplete step (Step 4). There is no rollback because every component is non-destructive and re-runnable — the resume *is* the recovery.
+**Resume:** re-running `apply` after a partial failure re-invokes every component in the same safe order; the idempotent units no-op the already-completed steps and the run continues from the first incomplete step (Step 4), as long as every component script remains independently idempotent. There is no rollback because every component is non-destructive and re-runnable — the resume *is* the recovery.
 
 ## Output style
 
@@ -132,7 +132,7 @@ Be concise — report status and outcomes flatly, no wall-of-text. Present the p
 - **Fixed safe write order: docs → configs → labels → branch model → CI → branch protection**, with **CI strictly before protection** — protection's required status checks must already exist as CI job names ([BRIEF.md:90](../../BRIEF.md); `SPEC.md` §7; issue AC-1, AC-2).
 - **Each step is a thin invocation of its owning component** (docs→#7, configs→#5/#8, labels→#6, branch model→#10, CI→#11, protection→#12) — `apply` orchestrates only, duplicating no component's logic (issue Design; `SPEC.md` §7).
 - **Non-interactive, direct-write path only.** Config writers (#5/#8) are invoked directly, never the interactive `setup` interviews — running those mid-`apply` would re-interview the user, breaking the plan-is-the-contract model (`scripts/write-driver-config.sh`/`write-feeder-config.sh` headers).
-- **Ordered + idempotent, no apply-side state ledger.** A re-run after a partial failure resumes from the first incomplete step by re-running `apply`; re-asserting protection (merge-UP) is allowed, never destructive ([BRIEF.md:54,65](../../BRIEF.md); `create/SKILL.md:166-174`).
+- **Ordered + idempotent, no apply-side state ledger.** A re-run after a partial failure resumes from the first incomplete step by re-running `apply`, as long as every component script remains independently idempotent; re-asserting protection (merge-UP) is allowed, never destructive ([BRIEF.md:54,65](../../BRIEF.md); `create/SKILL.md:166-174`).
 - **Three states, never collapsed** — `captured` deploys; `none` is a reported no-op, never a fabricated default; `[TBD]` 🔴 is re-surfaced and left unwritten/placeholder, never fabricated (`SPEC.md` §4.3; issue AC-3).
 - **Partial failure halts, names the failed step, reports what was/wasn't written, and never rolls back, force-pushes, or deletes** (issue AC-4; `create/SKILL.md:164-174`).
 - **The `gh` precondition is surfaced, never silent** — local steps (docs, configs) run regardless; remote steps (labels, branch model, CI, protection — the last needing repo-admin) are 🔴 blocked-on-precondition, reported before the attempt ([BRIEF.md:82](../../BRIEF.md); issue AC-6).
