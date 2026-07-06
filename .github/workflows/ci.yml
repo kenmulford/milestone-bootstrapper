@@ -1,0 +1,43 @@
+name: CI
+
+# This repo's first-ever CI workflow. One pull-request gate for the
+# milestone-bootstrapper plugin:
+#
+#   skill-size gate — fails if any skills/*/SKILL.md exceeds its whole-file
+#                      word ceiling (2,500 words, wc -w) or its frontmatter
+#                      description: field exceeds its ceiling (~200 words).
+#                      See scripts/check-skill-size.sh for the enforced
+#                      ceilings and the checker itself.
+#
+# The job name below ("skill-size gate") is the required-status-check context
+# a later branch-protection issue would register — this workflow only adds the
+# gate, it does not wire up branch protection itself.
+#
+# Runs on pull_request only: required status checks are evaluated on PRs, so a
+# push-triggered run would gate nothing and only add noise on the protected
+# branch tip. Structurally mirrors the sibling milestone-feeder repo's CI shape
+# exactly (milestone-feeder/.github/workflows/ci.yml): pull_request into
+# [main, develop], contents:read, a concurrency group keyed on workflow+ref
+# with cancel-in-progress, one ubuntu-latest job that checks out then runs the
+# gate script.
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-size-gate:
+    name: skill-size gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code under review
+        uses: actions/checkout@v7
+      - name: Check SKILL.md word ceilings
+        run: ./scripts/check-skill-size.sh

@@ -1,0 +1,13 @@
+{
+  "autoHandoff": "off",
+  "versioning": "semver",
+  "sourceGlobs": [
+    "skills/**",
+    "agents/**",
+    "hooks/**",
+    "scripts/**",
+    "project-docs/**",
+    ".claude-plugin/**",
+    ".github/**"
+  ]
+}

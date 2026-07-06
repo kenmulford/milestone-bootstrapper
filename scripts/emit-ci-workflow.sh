@@ -306,7 +306,7 @@ NEW_CONTENT="$(cat <<EOF
 name: CI
 
 # CI gate for PRs into the integration branch. Emitted by milestone-bootstrapper
-# from .milestone-config/driver.json (#8's output) — do not hand-edit the command
+# from .milestone-config/driver.json (output of #8) — do not hand-edit the command
 # steps or job names here; change them in driver.json and re-run apply/update.
 #
 # The two job names below ("${UNIT_TESTS_CONTEXT}" and "${PREFLIGHT_CONTEXT}") are the
@@ -390,29 +390,52 @@ if [ -f "$WORKFLOW_FILE" ]; then
 fi
 
 # --- Write (create .github/workflows/ if absent) -------------------------------
-if ! mkdir -p "$WORKFLOWS_DIR" 2>/dev/null; then
-  echo "ERROR: cannot create directory: ${WORKFLOWS_DIR}" >&2
-  exit 2
-fi
+# write_workflow — writes NEW_CONTENT atomically via a temp file so a failure
+# never leaves a partial/invalid ci.yml in place. printf (not echo) for
+# portable, BOM-free UTF-8 output. Callable more than once (the read-back
+# retry below re-invokes it verbatim). Returns 0 on success.
+write_workflow() {
+  if ! mkdir -p "$WORKFLOWS_DIR" 2>/dev/null; then
+    echo "ERROR: cannot create directory: ${WORKFLOWS_DIR}" >&2
+    return 1
+  fi
 
-# Write atomically via a temp file so a failure never leaves a partial/invalid
-# ci.yml in place. printf (not echo) for portable, BOM-free UTF-8 output.
-TMP_FILE="$(mktemp "${WORKFLOWS_DIR}/.ci.yml.XXXXXX" 2>/dev/null)" || {
-  echo "ERROR: cannot write to: ${WORKFLOWS_DIR} (path not writable)." >&2
-  exit 2
+  TMP_FILE="$(mktemp "${WORKFLOWS_DIR}/.ci.yml.XXXXXX" 2>/dev/null)" || {
+    echo "ERROR: cannot write to: ${WORKFLOWS_DIR} (path not writable)." >&2
+    return 1
+  }
+  trap 'rm -f "$TMP_FILE"' EXIT
+
+  if ! printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE" 2>/dev/null; then
+    echo "ERROR: failed to write CI workflow to: ${WORKFLOWS_DIR}" >&2
+    return 1
+  fi
+
+  if ! mv "$TMP_FILE" "$WORKFLOW_FILE" 2>/dev/null; then
+    echo "ERROR: failed to write CI workflow to: ${WORKFLOWS_DIR}" >&2
+    return 1
+  fi
+  trap - EXIT
+  return 0
 }
-trap 'rm -f "$TMP_FILE"' EXIT
 
-if ! printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE" 2>/dev/null; then
-  echo "ERROR: failed to write CI workflow to: ${WORKFLOWS_DIR}" >&2
-  exit 2
-fi
+write_workflow || exit 2
 
-if ! mv "$TMP_FILE" "$WORKFLOW_FILE" 2>/dev/null; then
-  echo "ERROR: failed to write CI workflow to: ${WORKFLOWS_DIR}" >&2
-  exit 2
+# --- Read-back verify + one bounded retry (issue #109) -----------------------
+# This writer makes no gh/API call (verified: it only touches local disk), so
+# there is no eventual-consistency risk to guard against — the "read-back" is
+# simply re-reading the just-written file and comparing it to what we emitted,
+# catching a truncated/corrupt write despite a successful `mv`. One retry (rewrite
+# via the same atomic temp-file path, then re-compare) before halting — never
+# a second retry (`.project/design-philosophy.md#Error & failure philosophy`).
+if [ "$(cat "$WORKFLOW_FILE" 2>/dev/null)" != "$NEW_CONTENT" ]; then
+  echo "milestone-bootstrapper: read-back of ${WORKFLOW_FILE} differs from what was written — retrying once."
+  write_workflow || exit 2
+  if [ "$(cat "$WORKFLOW_FILE" 2>/dev/null)" != "$NEW_CONTENT" ]; then
+    echo "ERROR: ${WORKFLOW_FILE} still diverges from the emitted content after one retry. Re-run to confirm; the path may need manual inspection." >&2
+    exit 2
+  fi
 fi
-trap - EXIT
 
 echo "${WORKFLOW_FILE} written."
 echo "  required-status-check contexts: ${UNIT_TESTS_CONTEXT}, ${PREFLIGHT_CONTEXT}"

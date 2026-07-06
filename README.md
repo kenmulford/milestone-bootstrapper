@@ -110,7 +110,7 @@ The first time you run `plan` in a repo with no config, it writes a small profil
 A few things need to be in place for `apply` and `update` to do their work. Each comes with what breaks without it.
 
 - **`gh` (the GitHub CLI) installed and signed in**, in a directory connected to a GitHub repo — otherwise we can't create your branches, labels, CI, or protection.
-- **`gh` with admin on the repo** — branch protection goes through the GitHub API and needs it. Without admin everything else still runs, and we flag the protection step rather than fail quietly.
+- **`gh` with admin on the repo** — branch protection goes through the GitHub API and needs it. Without admin everything else still runs, and we flag the protection step rather than fail quietly. The floor it sets requires a pull request and passing CI, but zero human approvals — it's not a peer-review gate.
 - **Claude allowed to run** `gh label create`, `gh api`, `gh repo edit`, and `git`, and to **write** under `.project/`, `.milestone-config/`, and `.github/workflows/`.
 - **bash with `jq`, or PowerShell 7+** — every step ships both, so it runs on either.
 

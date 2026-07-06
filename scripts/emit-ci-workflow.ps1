@@ -312,7 +312,7 @@ $NewContent = @"
 name: CI
 
 # CI gate for PRs into the integration branch. Emitted by milestone-bootstrapper
-# from .milestone-config/driver.json (#8's output) — do not hand-edit the command
+# from .milestone-config/driver.json (output of #8) — do not hand-edit the command
 # steps or job names here; change them in driver.json and re-run apply/update.
 #
 # The two job names below ("$UnitTestsContext" and "$PreflightContext") are the
@@ -396,24 +396,54 @@ if (Test-Path -LiteralPath $WorkflowFile -PathType Leaf) {
 }
 
 # --- Write (create .github/workflows/ if absent) -------------------------------
-# Initialize $tmp BEFORE the try so the catch can reference it safely under
-# StrictMode (parity with the sibling writers' temp-file pattern).
-$tmp = $null
-try {
-    if (-not (Test-Path -LiteralPath $WorkflowsDir)) {
-        New-Item -ItemType Directory -Path $WorkflowsDir -Force | Out-Null
+# Write-Workflow — writes $NewContent atomically via a temp file so a failure
+# never leaves a partial file (parity with the sibling writers' temp-file
+# pattern). Callable more than once (the read-back retry below re-invokes it
+# verbatim). Returns $true on success.
+function Write-Workflow {
+    $tmp = $null
+    try {
+        if (-not (Test-Path -LiteralPath $WorkflowsDir)) {
+            New-Item -ItemType Directory -Path $WorkflowsDir -Force | Out-Null
+        }
+        # Atomic-ish write via a temp file. utf8NoBOM keeps the YAML BOM-free
+        # and portable; an explicit trailing LF matches the bash twin's
+        # `printf '%s\n'`.
+        $tmp = Join-Path $WorkflowsDir ('.ci.yml.' + [System.IO.Path]::GetRandomFileName())
+        Set-Content -LiteralPath $tmp -Value $NewContent -Encoding utf8NoBOM -NoNewline
+        Add-Content -LiteralPath $tmp -Value "`n" -Encoding utf8NoBOM -NoNewline
+        Move-Item -LiteralPath $tmp -Destination $WorkflowFile -Force
+        return $true
+    } catch {
+        if ($tmp -and (Test-Path -LiteralPath $tmp)) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        [Console]::Error.WriteLine("ERROR: failed to write CI workflow to: $WorkflowsDir ($($_.Exception.Message))")
+        return $false
     }
-    # Atomic-ish write via a temp file so a failure never leaves a partial file.
-    # utf8NoBOM keeps the YAML BOM-free and portable; an explicit trailing LF
-    # matches the bash twin's `printf '%s\n'`.
-    $tmp = Join-Path $WorkflowsDir ('.ci.yml.' + [System.IO.Path]::GetRandomFileName())
-    Set-Content -LiteralPath $tmp -Value $NewContent -Encoding utf8NoBOM -NoNewline
-    Add-Content -LiteralPath $tmp -Value "`n" -Encoding utf8NoBOM -NoNewline
-    Move-Item -LiteralPath $tmp -Destination $WorkflowFile -Force
-} catch {
-    if ($tmp -and (Test-Path -LiteralPath $tmp)) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-    [Console]::Error.WriteLine("ERROR: failed to write CI workflow to: $WorkflowsDir ($($_.Exception.Message))")
-    exit 2
+}
+
+if (-not (Write-Workflow)) { exit 2 }
+
+# --- Read-back verify + one bounded retry (issue #109) -----------------------
+# This writer makes no gh/API call (verified: it only touches local disk), so
+# there is no eventual-consistency risk to guard against — the "read-back" is
+# simply re-reading the just-written file and comparing it to what we emitted,
+# catching a truncated/corrupt write despite a successful move. One retry
+# (rewrite via the same atomic temp-file path, then re-compare) before
+# halting — never a second retry (`.project/design-philosophy.md#Error &
+# failure philosophy`).
+function Get-WorkflowContent {
+    $existing = Get-Content -LiteralPath $WorkflowFile -Raw
+    if ($null -eq $existing) { $existing = '' }
+    return $existing.TrimEnd("`r", "`n")
+}
+
+if ((Get-WorkflowContent) -ne $NewContent.TrimEnd("`r", "`n")) {
+    Write-Output "milestone-bootstrapper: read-back of $WorkflowFile differs from what was written — retrying once."
+    if (-not (Write-Workflow)) { exit 2 }
+    if ((Get-WorkflowContent) -ne $NewContent.TrimEnd("`r", "`n")) {
+        [Console]::Error.WriteLine("ERROR: $WorkflowFile still diverges from the emitted content after one retry. Re-run to confirm; the path may need manual inspection.")
+        exit 2
+    }
 }
 
 Write-Output "$WorkflowFile written."

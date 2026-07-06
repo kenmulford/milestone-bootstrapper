@@ -86,7 +86,8 @@
 #                                 `false` => write `versioning: false` (the ONLY
 #                                 value ever written for this key).
 #     --stack <enum>              the runtime family the emitter will scaffold setup
-#                                 for, one of node|python|dotnet|maui|rust|plugin|none.
+#                                 for, one of
+#                                 node|python|dotnet|maui|rust|plugin|ruby|none.
 #                                 absent-means-default: `none` (or omitted) => OMIT
 #                                 the key; any other member => write it. An unknown
 #                                 value is a bad input (exit 1).
@@ -235,18 +236,20 @@ if [ "$VERSIONING" != "$UNSET" ]; then
 fi
 
 # --- Validate stack (omit-when-default; `none`/empty => OMIT, else write) -------
-# The enum is node|python|dotnet|maui|rust|plugin|none. `none` (and an unset/empty
-# value) means "omit the key", so it is VALID input. Any other value is rejected
-# with a clear message naming the allowed set + exit 1 (mirrors the --versioning
-# reject-unknown shape above). The descriptive->enum mapping (e.g. angular collapses
-# to node) is issue #65's job — this writer only validates the resolved enum.
+# The enum is node|python|dotnet|maui|rust|plugin|ruby|none. `none` (and an
+# unset/empty value) means "omit the key", so it is VALID input. Any other value
+# is rejected with a clear message naming the allowed set + exit 1 (mirrors the
+# --versioning reject-unknown shape above). The descriptive->enum mapping (e.g.
+# angular collapses to node) is issue #65's job — this writer only validates the
+# resolved enum. `ruby` covers both Rails and plain Ruby (parity with `python`
+# covering FastAPI/Django/Flask/unresolved as one enum member; issue #104).
 WRITE_STACK=0
 if [ -n "$STACK" ]; then
   case "$STACK" in
-    node|python|dotnet|maui|rust|plugin) WRITE_STACK=1 ;;
+    node|python|dotnet|maui|rust|plugin|ruby) WRITE_STACK=1 ;;
     none) WRITE_STACK=0 ;;  # default => omit
     *)
-      echo "ERROR: --stack must be one of node|python|dotnet|maui|rust|plugin|none (got: $STACK)." >&2
+      echo "ERROR: --stack must be one of node|python|dotnet|maui|rust|plugin|ruby|none (got: $STACK)." >&2
       exit 1 ;;
   esac
 fi
