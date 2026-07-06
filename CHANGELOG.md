@@ -2,6 +2,16 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.5.1 — audit remediation: verify loops, resumability, size budgets
+
+Patch release — the audit-remediation milestone (10 issues, all merged CI-green).
+
+- SPEC.md documents `config-catalog.md` as the 7th project doc (#103); plan-file slug length pinned to one exact number, SPEC §2.2 (#105)
+- Rails/Ruby stack detection in detect-stack + write-driver-config (#104)
+- plan/apply/update SKILL.md worked examples split into `references/` (#106, #107, #108)
+- Read-back verify + retry loop on apply's remote-writing deploy steps (#109); entry-level resumability in update's reconcile pass (#110)
+- README/apply/update honesty + usability fixes (#111); CI size-budget gate for SKILL.md word ceilings (#112)
+
 ## v0.5.0 — provision `md-epic`, de-dup the label taxonomy
 
 **Theme:** `milestone-driver` 1.15.0 reads a new label, `md-epic`, to treat an issue as a parent issue whose body lists several milestones in build order — but the driver only *reads* it; provisioning it is the bootstrapper's job. Before adding it, the label taxonomy is de-duped to a single canonical prose enumeration (`SPEC.md` §6.3) so future label changes touch one prose site instead of drifting across three.
