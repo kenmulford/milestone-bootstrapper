@@ -2,6 +2,28 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.6.1 — .project freshness check
+
+**Theme:** Nothing re-verified `.project/` against the code after creation — drift surfaced only reactively, at a broken build-time citation or a human-initiated re-plan. This release adds a standalone, read-only freshness check that re-derives what `.project/` should say from the repo's own detection signals and reports drift proactively, on demand or in CI.
+
+### ✨ .project freshness check
+
+| Issue | PR | What |
+|---|---|---|
+| #129 Add check-project-docs.{sh,ps1} | #134 | New read-only component-script twin that re-runs `detect-stack.{sh,ps1}` to re-derive the detected application stack(s) and diffs each against `.project/library-manifest.md#Runtime & frameworks`, reporting drift. `--check`/`-Check` makes drift a nonzero (exit 2) CI gate; without the flag drift is informational only (exit 0). Never writes any `.project/` file on any code path. |
+| #130 Add a flagless `check` skill verb | #135 | New fourth verb alongside `plan`/`apply`/`update` — `skills/check/SKILL.md`, invoked as `/milestone-bootstrapper:check`. A thin, read-only orchestration layer that invokes `check-project-docs.{sh,ps1}` and surfaces any detected drift as an advisory review prompt; writes nothing and only reports. |
+
+### Consumer notes (upgrading from v0.5.1)
+
+- New optional verb: run `/milestone-bootstrapper:check` any time to review whether your `.project/` docs have drifted from what the repo's own detection now implies. Purely advisory — it never rewrites your docs.
+- New component script `scripts/check-project-docs.{sh,ps1}` is available directly for CI: pass `--check`/`-Check` to exit nonzero on drift.
+- **No schema changes** to `.milestone-config/driver.json`.
+- **Version note:** the `0.6.0` bump (#128) was merged to `main` ahead of these features (no tag/release was cut for it). `0.6.1` is the actual feature release; `0.6.0` was never released as a distinct version.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none
+
 ## v0.5.1 — audit remediation: verify loops, resumability, size budgets
 
 Patch release — the audit-remediation milestone (10 issues, all merged CI-green).
