@@ -2,6 +2,27 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.7.0 — detector-to-config consistency check
+
+**Theme:** `detect-stack` maps each detected stack to a `domainSkills` value seeded into `.milestone-config/driver.json` at bootstrap, but nothing re-verified that config against the detector afterward — the same reactive-only drift hole v0.6.1 closed for `library-manifest.md`, applied to the one other deterministically-checkable field the detector emits. This release closes it, and extends the shipped `check` verb to cover it — no new verb.
+
+### ✨ Detector-to-config consistency check
+
+| Issue | PR | What |
+|---|---|---|
+| #139 Add check-driver-config.{sh,ps1} | #142 | New read-only component-script twin — the `domainSkills`-scoped sibling of `check-project-docs.{sh,ps1}`. Set-compares the union of detected app-stack `domainSkills` against `driver.json`'s recorded value, reporting any difference; `--check`/`-Check` exits nonzero for CI. Honors the tracked Ruby exemption (resolves #104) so it never false-positives on Rails/Ruby repos. |
+| #140 Extend the check skill | #143 | `skills/check/SKILL.md` now invokes `check-driver-config.{sh,ps1}` alongside `check-project-docs.{sh,ps1}` and aggregates both scripts' independent advisory reports — each attributed distinctly, never merged or swallowed. A new precondition gate skips `check-driver-config` (with an advisory "not yet configured" line) when `.milestone-config/driver.json` doesn't exist yet, rather than surfacing its hard error. |
+
+### Consumer notes (upgrading from v0.6.1)
+
+- `/milestone-bootstrapper:check` now reports drift for TWO things: `.project/` doc freshness (v0.6.1) and `.milestone-config/driver.json`'s `domainSkills` field (this release). Both are advisory-only — neither is ever auto-rewritten.
+- New component script `scripts/check-driver-config.{sh,ps1}` is also available directly for CI: pass `--check`/`-Check` to exit nonzero on drift.
+- **No schema changes** to `.milestone-config/driver.json`.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none
+
 ## v0.6.1 — .project freshness check
 
 **Theme:** Nothing re-verified `.project/` against the code after creation — drift surfaced only reactively, at a broken build-time citation or a human-initiated re-plan. This release adds a standalone, read-only freshness check that re-derives what `.project/` should say from the repo's own detection signals and reports drift proactively, on demand or in CI.
