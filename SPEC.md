@@ -255,6 +255,7 @@ changed), never `human-owned`.
 |---|---|---|
 | `driver.json#integrationBranch` | The integration branch name. | branch model (§6.3) |
 | `driver.json#protectedBranch` | The protected branch name. | branch model (§6.3) |
+| `driver.json#projectDocs` | The project-docs location, when non-default — the SAME value written to `feeder.json#projectDocs` below (dual-write, one Job-1 path, two consumers; `milestone-driver/docs/profile-schema.md:122`). | §4.1 target path |
 | `driver.json#sourceGlobs` | The code paths the driver's hooks guard. **Recorded root-absolute** — each glob already carries its app-root prefix (§4.1 `appRoots`), so a nested-app repo emits `siteroot/web/**`, a single-root repo emits `skills/**` (the `"."` prefix is a no-op). | repo layout × `appRoots` (§4.1) |
 | `driver.json#uiSurfaceGlobs` | UI surface paths (UI projects only; else `none`). **Recorded root-absolute** — same app-root prefixing as `sourceGlobs`. | repo layout / stack capture × `appRoots` (§4.1) |
 | `driver.json#unitTestCmd` / `preflightCmd` | Detected test / preflight commands. | stack detection |
@@ -266,7 +267,6 @@ changed), never `human-owned`.
 | `driver.json#stack` | The runtime family the emitter scaffolds setup for — one of `node` \| `python` \| `dotnet` \| `maui` \| `rust` \| `plugin` \| `none`. Omitted when `none` (no scaffold). | stack detection |
 | `driver.json#stackVersionFile` | The detected version-file path (e.g. `.nvmrc`, `.python-version`, `global.json`), when one resolved. | stack detection |
 | `feeder.json#projectDocs` | The project-docs location, when non-default. | §4.1 target path |
-| `feeder.json#reviewer` | The self-check reviewer, when non-default. | suite wiring |
 
 Defaults are **omitted** (a key at its default is not written — the configs stay
 minimal). An entry is recorded only when the captured value diverges from the consumer

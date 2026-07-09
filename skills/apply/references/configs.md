@@ -5,10 +5,10 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (2). Write the two config
 Pass each writer the **resolved values from the §B Configs rows** (the writer re-derives nothing; detection happened in `plan`):
 
 ```bash
-# bash — feeder.json slice (#5): the feeder-owned keys projectDocs / reviewer /
-# versioning. Omit projectDocs/reviewer when at the bundled default; omit
-# --versioning when the Tier-6 answer was skipped (versioning has NO default).
-./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"] [--reviewer "<val>"] [--versioning "<semver|none>"]
+# bash — feeder.json slice (#5): the feeder-owned keys projectDocs / versioning.
+# Omit --project-docs when at the bundled default; omit --versioning when the
+# Tier-6 answer was skipped (versioning has NO default).
+./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"] [--versioning "<semver|none>"]
 
 # bash — driver.json slice (#8): the three Core keys are REQUIRED; optionals are
 # omitted when the plan did not record them (never written as null/empty). The
@@ -25,7 +25,7 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 
 ```powershell
 # PowerShell 7+ — the behaviorally-equivalent twins (PascalCase -Flag params).
-./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Reviewer "<val>"] [-Versioning "<semver|none>"]
+./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Versioning "<semver|none>"]
 ./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-ProjectDocs "<path>"] [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 

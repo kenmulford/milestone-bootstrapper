@@ -25,7 +25,7 @@ The writers stay idempotent under this discipline: when the assembled union equa
 # bash — feeder.json slice (#5). Pass the UNION: every live key (live value if the
 # plan doesn't change it, plan value if it does) PLUS plan additions — so the
 # whole-file rewrite reproduces every live key and drops none.
-./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"] [--reviewer "<val>"]
+./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"]
 
 # bash — driver.json slice (#8). Same UNION rule. The three Core keys are always
 # written; every OTHER live key is passed back with its live value unless the plan
@@ -41,7 +41,7 @@ The writers stay idempotent under this discipline: when the assembled union equa
 
 ```powershell
 # PowerShell 7+ — behaviorally-equivalent twins (PascalCase -Flag params). Same UNION rule.
-./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Reviewer "<val>"]
+./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"]
 ./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 
@@ -51,4 +51,5 @@ The writers stay idempotent under this discipline: when the assembled union equa
 - **`nonNegotiables`** → same UNION rule as `domainSkills`. Pass `--non-negotiables` / `-NonNegotiables` with the **plan value** when the plan changes it, else the **live value** carried back so the whole-file rewrite preserves it; omit **only when neither the plan nor the live config carries it** (never written as `[]` — a recorded "none", never fabricated). A live-only `nonNegotiables` the plan no longer carries is the live-only case — flagged 🔴 for the human AND passed through in the union write so the rewrite preserves it.
 - **`versioning`** → pass `--versioning false` / `-Versioning false` when the plan records `versioning: false` **or** the live config already has `versioning: false` and the plan doesn't change it (union); omit only when neither carries it.
 - **`stack` / `stackVersionFile`** → same UNION rule as `domainSkills`. Pass `--stack` / `-Stack` and `--stack-version-file` / `-StackVersionFile` with the **plan value** when the plan changes them, else the **live value** carried back so the whole-file rewrite preserves them; omit a key **only when neither the plan nor the live config carries it** (an absent key stays absent — never written as empty; the version-file is a PATH, never a resolved version). A live-only `stack`/`stackVersionFile` the plan no longer carries is the live-only case — flagged 🔴 for the human AND passed through in the union write so the rewrite preserves it.
-- **The union write is what makes these writers non-destructive.** Because each writer rebuilds the whole file from the keys passed, `update` must pass every live key back in — a key the plan no longer carries is the **live-only** case (Step 5): it is **flagged 🔴 for the human AND passed through in the union write** so the rewrite preserves it. It is **never stripped** — the writer drops it only if `update` fails to pass it, which `update` never does.
+- **`reviewer` (retired) — the ONE exception to the union rule.** `write-feeder-config.*` no longer accepts `--reviewer` / `-Reviewer` — the feeder retired this own-key (self-check gate removed; an unrecognized key is ignored gracefully by the feeder itself), so the writer now errors on the unknown flag. Do **not** pass a live `reviewer` value back. A `feeder.json` written before this fix that still carries `reviewer` **loses it** on the next `update` union write — this is safe and deliberate (the key is already inert downstream), not a live-only case to flag 🔴.
+- **The union write is what makes these writers non-destructive.** Because each writer rebuilds the whole file from the keys passed, `update` must pass every live key back in — a key the plan no longer carries is the **live-only** case (Step 5): it is **flagged 🔴 for the human AND passed through in the union write** so the rewrite preserves it. It is **never stripped** — the writer drops it only if `update` fails to pass it, which `update` never does. **Exception:** `reviewer`, above — the writer itself no longer accepts it, so there is nothing to pass.

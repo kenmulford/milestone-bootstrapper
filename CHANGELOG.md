@@ -2,6 +2,19 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.7.1 — retire the dead `feeder.json#reviewer` key
+
+Patch release.
+
+- `write-feeder-config.{sh,ps1}` no longer write `feeder.json#reviewer` — milestone-feeder retired this own-key upstream (self-check gate removed; the key is ignored gracefully if present), but this plugin never stopped emitting it (#149)
+- `SPEC.md` §6.1, `BRIEF.md`, and the `plan`/`apply`/`update` skill docs no longer document `reviewer` as a live key; `SPEC.md` §6.1 also gained a missing `driver.json#projectDocs` row
+- `update`'s union-write docs now call out the one consequence of the retirement: a `feeder.json` written before this fix that still carries `reviewer` loses it on the next `update` (safe — the key was already inert)
+- New human-facing reference docs: `docs/driver-config-keys.md` and `docs/feeder-config-keys.md` list every key each config file can carry and which plugin owns it, linked from the README
+
+### Consumer notes
+
+- No action needed. A repo whose `feeder.json` already has `reviewer` set will have it silently dropped the next time `update` runs — this key did nothing after milestone-feeder retired it, so there's no behavior change to the feeder itself.
+
 ## v0.7.0 — detector-to-config consistency check
 
 **Theme:** `detect-stack` maps each detected stack to a `domainSkills` value seeded into `.milestone-config/driver.json` at bootstrap, but nothing re-verified that config against the detector afterward — the same reactive-only drift hole v0.6.1 closed for `library-manifest.md`, applied to the one other deterministically-checkable field the detector emits. This release closes it, and extends the shipped `check` verb to cover it — no new verb.
