@@ -184,7 +184,7 @@ Re-assert the protected branch's server-side safety floor — the **only re-asse
 
 ### Step 5 — The live-only case (present live, absent from the refreshed plan) — FLAG 🔴, NEVER delete
 
-A target present **live** but **absent from the refreshed plan** — a doc anchor, config key, label, or branch — is **flagged 🔴 and never removed** (mirrors the feeder update's flag-don't-close stance, `milestone-feeder/skills/update/SKILL.md:141`). For a **config key** this is active: the writers rebuild the whole file (Step 4 (2)), so `update` passes it back in the union write. **One narrow exception:** a live `feeder.json#reviewer` key (retired upstream by the feeder) is dropped, not passed back — the writer no longer accepts it — see `references/config-union-write.md` Per-key nuances.
+A target present **live** but **absent from the refreshed plan** — a doc anchor, config key, label, or branch — is **flagged 🔴 and never removed** (mirrors the feeder update's flag-don't-close stance, `milestone-feeder/skills/update/SKILL.md:141`). For a **config key** this is active: the writers rebuild the whole file (Step 4 (2)), so `update` passes it back in the union write.
 
 | Live-only target | Detection | Why flagged, never deleted |
 |---|---|---|
