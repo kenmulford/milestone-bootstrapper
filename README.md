@@ -8,7 +8,7 @@ It keeps all of that in two folders in your repo. The docs live under `.project/
 
 It also makes the repo ready for `milestone-driver` to build in. It provisions the labels both tools use, creates your integration and protected branches, writes a CI workflow that gates pull requests, and locks the protected branch behind that check.
 
-It's a Claude Code plugin with three commands. `plan` interviews you and previews what it would write. `apply` writes it all. `update` syncs it when your project changes later.
+It's a Claude Code plugin with four commands. `plan` interviews you and previews what it would write. `apply` writes it all. `update` syncs it when your project changes later. `check` is a read-only audit that flags when the docs or config have drifted from what the repo now looks like — it writes nothing.
 
 **Install it.** First install the `superpowers` plugin — milestone-bootstrapper needs it at runtime, and you add it yourself (earlier releases installed it for you; now it's a manual step, so skipping it means the commands won't run). Add the official `claude-plugins-official` marketplace and install `superpowers` from it:
 
@@ -54,9 +54,14 @@ flowchart TD
             direction LR
             u1["re-run against the<br/>changed project"] --> u2["sync the docs<br/>&amp; config"]
         end
+        subgraph sgC [check — read-only drift audit, anytime]
+            direction LR
+            c1["re-detect the stack"] --> c2["flag docs &amp; config<br/>that have drifted<br/>(writes nothing)"]
+        end
 
         sgP -->|you approve the plan| sgA
         sgA -.->|later, as the project evolves| sgU
+        sgA -.->|audit for drift anytime| sgC
     end
 
     brain ~~~ input
@@ -69,13 +74,14 @@ flowchart TD
     style sgP fill:#FFFFFF,stroke:#5AA6D4,color:#3A82B4
     style sgA fill:#FFFFFF,stroke:#3A82B4,stroke-width:2px,color:#3A82B4
     style sgU fill:#FFFFFF,stroke:#5AA6D4,color:#3A82B4
+    style sgC fill:#FFFFFF,stroke:#5AA6D4,color:#3A82B4
     classDef action fill:#EDF4FA,stroke:#7FAECE,color:#15212B
-    class p1,p2,p3,a1,a2,a3,u1,u2 action
+    class p1,p2,p3,a1,a2,a3,u1,u2,c1,c2 action
 ```
 
 ## Quick start
 
-Three commands — `plan`, then `apply`, and `update` when your project changes. Run them from inside the repo you're setting up.
+Four commands — `plan`, then `apply`, `update` when your project changes, and `check` to audit for drift anytime. Run them from inside the repo you're setting up.
 
 1. **`plan` the project.**
 
@@ -103,6 +109,14 @@ Three commands — `plan`, then `apply`, and `update` when your project changes.
 
    It shows you the diff first, patches the config that drifted, proposes — never overwrites — edits to docs you've changed by hand, and flags — never deletes — anything in the repo your plan no longer mentions. If nothing changed, it does nothing and says so.
 
+5. **`check` for drift, anytime.** A read-only audit — no interview, no writes:
+
+   ```
+   /milestone-bootstrapper:check
+   ```
+
+   It re-detects your stack and flags where it has drifted from what the docs and config record — the `.project/` docs against the repo, and `driver.json`'s `domainSkills` against the detected stack. It only reports; run `update` when you want to reconcile. The underlying scripts also run in CI (`--check` / `-Check`) to gate on drift.
+
 The first time you run `plan` in a repo with no config, it writes a small profile for you and carries on — you don't re-run anything.
 
 ## Before you start
@@ -114,7 +128,7 @@ A few things need to be in place for `apply` and `update` to do their work. Each
 - **Claude allowed to run** `gh label create`, `gh api`, `gh repo edit`, and `git`, and to **write** under `.project/`, `.milestone-config/`, and `.github/workflows/`.
 - **bash with `jq`, or PowerShell 7+** — every step ships both, so it runs on either.
 
-`plan` needs none of this. It interviews, reads, and detects — what it writes is a local file you review. The writes above are for `apply` and `update`.
+`plan` and `check` need none of this. `plan` interviews, reads, and detects — what it writes is a local file you review; `check` only reads and reports. The writes above are for `apply` and `update`.
 
 ## Config
 
@@ -122,7 +136,7 @@ There's nothing to configure to start — the first `plan` run writes a small pr
 
 ## Status
 
-**v1 — built.** `plan`, `apply`, and `update` all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. Part of a dev-tools suite with `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
+**v0.7.0 — built.** `plan`, `apply`, `update`, and the read-only `check` drift audit all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. For the full version history, see [CHANGELOG.md](CHANGELOG.md). Part of a dev-tools suite with `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
 
 ## Docs
 
