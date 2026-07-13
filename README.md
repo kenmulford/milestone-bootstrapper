@@ -19,7 +19,7 @@ It's a Claude Code plugin with four commands. `plan` interviews you and previews
 
 Then install milestone-bootstrapper itself, using one of the two methods below. Restart Claude Code afterward so the plugins load.
 
-Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all four suite plugins (`milestone-bootstrapper`, `milestone-feeder`, `milestone-driver`, `milestone-coherence-reviewer`). Add one marketplace and install any of them:
+Recommended — install from the [`milestone-suite`](https://github.com/kenmulford/milestone-suite) marketplace, which catalogs all five suite plugins (`milestone-bootstrapper`, `milestone-designer`, `milestone-feeder`, `milestone-driver`, `milestone-coherence-reviewer`). Add one marketplace and install any of them:
 
 ```
 /plugin marketplace add kenmulford/milestone-suite
@@ -136,7 +136,7 @@ There's nothing to configure to start — the first `plan` run writes a small pr
 
 ## Status
 
-**v0.7.0 — built.** `plan`, `apply`, `update`, and the read-only `check` drift audit all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. For the full version history, see [CHANGELOG.md](CHANGELOG.md). Part of a dev-tools suite with `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
+**v0.7.0 — built.** `plan`, `apply`, `update`, and the read-only `check` drift audit all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. For the full version history, see [CHANGELOG.md](CHANGELOG.md). Part of a dev-tools suite with `milestone-designer`, `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
 
 ## Docs
 
