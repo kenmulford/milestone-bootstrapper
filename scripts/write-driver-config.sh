@@ -141,6 +141,39 @@
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq opens stdout in TEXT mode, so every `\n` it writes becomes
+# `\r\n` and any jq value the shell consumes as TEXT carries a stray `\r`. Cause,
+# mechanism, and the `s/\r$//` rationale are documented once in the canonical
+# block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Exactly ONE stream here needs it: NEW_CONTENT, the serialized driver.json. It is
+# never re-parsed as JSON in-script — it is consumed as TEXT, and because it is a
+# MULTI-line value the usual msys accident does not save it: `$(...)` strips only
+# the TRAILING newline, so every interior CR survives. This is LIVE, not latent
+# (measured on jq-1.8.1: 8 CR bytes in the emitted driver.json). It costs:
+#   - the write itself. `printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE"` persists CRLF
+#     into driver.json — the config every other script in this suite reads back,
+#     and a break of the byte-identical-with-the-.ps1-twin contract these writers
+#     maintain (the twin uses ConvertTo-Json and emits LF).
+#   - the idempotency compare `[ "$(cat "$CONFIG_FILE")" = "$NEW_CONTENT" ]`
+#     whenever the on-disk file is LF — i.e. one written by the .ps1 twin, by a
+#     POSIX run, or checked out by git. `cat` yields LF, the CRLF NEW_CONTENT
+#     never matches, and the no-op check fails: the script rewrites a file that
+#     was already correct and flips it to CRLF. (A CRLF file this script wrote
+#     itself still matches — both sides mangled alike — so the breakage shows up
+#     only across toolchains, which is exactly where it is hardest to diagnose.)
+#   - the trailing `echo "$NEW_CONTENT"` display.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe.
+#
+# EXEMPT — do NOT "fix" these: the `jq -e 'type == …'` input validators below
+# (exit code only, no text consumed) and the `command -v jq` presence check.
+#
+# `set -o pipefail` is in force above, so making the NEW_CONTENT capture a
+# PIPELINE does not swallow a jq failure: jq's non-zero status still propagates
+# to the `if !` error branch. Same shape as write-project-docs.sh:211.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Bundled default (mirror milestone-feeder/docs/profile-schema.md; the shared
 # projectDocs pointer's default — see write-feeder-config.sh:58) -----------------
 readonly DEFAULT_PROJECT_DOCS=".project/"
@@ -368,7 +401,7 @@ if [ "$WRITE_INTEGRATION_PROTECTION" -eq 1 ]; then
   args+=(--arg integrationProtection "$INTEGRATION_PROTECTION")
 fi
 
-if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1)"; then
+if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1 | strip_cr)"; then
   echo "ERROR: failed to serialize driver.json: ${NEW_CONTENT}" >&2
   exit 2
 fi

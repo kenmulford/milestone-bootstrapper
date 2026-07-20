@@ -129,6 +129,65 @@
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq opens stdout in TEXT mode, so every `\n` it writes becomes
+# `\r\n` and any jq value the shell consumes as TEXT carries a stray `\r`. Cause,
+# mechanism, and the `s/\r$//` rationale are documented once in the canonical
+# block at scripts/write-project-docs.sh:87-121 — not restated here.
+# One site here is LIVE; the rest are LATENT. Both are recorded, so nobody
+# "proves" the latent ones safe and removes the seam:
+#
+# LIVE — PUT_BODY (and NORM_CURRENT beside it) are MULTI-line, and `$(...)`
+#   strips only the TRAILING newline, so every interior CR survives. Measured on
+#   jq-1.8.1: 24 CR bytes in the --dry-run preview. That means a garbled preview,
+#   a non-canonical body on the wire, and divergence from the byte-identical
+#   output contract this script shares with provision-protection.ps1. The no-op
+#   compare at NORM_CURRENT vs PUT_BODY still returns the right answer unfolded —
+#   but only because BOTH sides come from the same text-mode jq and are mangled
+#   IDENTICALLY. That is an accident of symmetry, not a property. Folding both
+#   keeps them symmetric AND makes them canonical.
+#
+# LATENT — every other folded site is a SINGLE-line scalar, and on the msys
+#   toolchain this script was developed against `$(...)` strips a trailing CRLF
+#   WHOLE, so they come back clean today (measured CR=0). That is a TOOLCHAIN
+#   behavior, not a guarantee — WSL bash invoking a Windows `jq.exe` need not do
+#   it, and the multi-line form of the same pattern is ALREADY broken above. What
+#   each would cost if a CR ever did survive:
+#     - the enforce_admins read in the integration-floor REFUSE guard: a CR'd
+#       "true" is not equal to "true", so the guard would not fire and the run
+#       would PUT enforce_admins:false over a branch already carrying the
+#       release-grade `true` — the never-weaken invariant broken SILENTLY,
+#       exit 0. Worst case in the file: a safety refusal turned into a downgrade.
+#     - HAS_CONTEXTS in read_back_protection lands in a `-ne` INTEGER test, which
+#       bash would reject ("integer expression expected"). The function returns
+#       non-zero, so a good PUT reads as read-back drift — one spurious re-PUT,
+#       then a spurious `api_fail` (exit 2) on a correctly-protected repo.
+#     - INTEGRATION_PROTECTION: a CR'd `floor` matches neither `""|none` nor
+#       `floor`, falls to the reject-unknown `*)` arm, and fails with a message
+#       naming the value the user DID set correctly — maximally confusing.
+#     - TARGET_BRANCH rides straight into REST paths (`repos/${SLUG}/branches/
+#       ${TARGET_BRANCH}`), where a CR'd name 404s and reports the branch as
+#       missing (the issue #10 precondition) instead of the real cause.
+#     - CONTEXTS_DISPLAY is echoed into user messages, where a bare CR returns
+#       the cursor to column 0 and overwrites the line already printed.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe — verified: with LF input the --dry-run body is byte-identical before
+# and after this change, on both floors (#93's release-path criterion).
+#
+# EXEMPT — do NOT "fix" these:
+#   - the `jq -e .` config validation below: exit code only, no text consumed.
+#   - CONTEXTS_JSON: re-parsed as JSON via `--argjson` when the merge filter
+#     runs. CR is legal JSON whitespace (RFC 8259 §2), so it needs no fold.
+#   - the `gh repo view --json … --jq` / `gh api … --jq` sites (SLUG, ADMIN).
+#     `--jq` is gh's BUILT-IN Go jq, not the external binary: it writes bytes
+#     directly with no Windows text-mode translation and emits zero CR (verified
+#     on gh 2.87.3). Piping those through the seam would imply a hazard that is
+#     not there.
+# Note PUT_BODY has TWO consumers — the text compare, and `gh api -X PUT
+# --input -`. Folding is safe for the PUT: `s/\r$//` removes only a CR that
+# precedes the LF sed splits on, and that CR is insignificant JSON whitespace.
+strip_cr() { sed $'s/\r$//'; }
+
 REPO="."
 DRY_RUN=0
 # The floor defaults to `release` — the pre-#93 behavior, byte-for-byte.
@@ -219,7 +278,7 @@ fi
 # `release` on purpose: appending the note there would change that path's
 # long-standing output, and the release rendering is byte-frozen.
 if [ "$FLOOR" = "release" ]; then
-  TARGET_BRANCH="$(jq -r '.protectedBranch // empty' "$CONFIG_FILE")"
+  TARGET_BRANCH="$(jq -r '.protectedBranch // empty' "$CONFIG_FILE" | strip_cr)"
   [ -n "$TARGET_BRANCH" ] \
     || fail "key 'protectedBranch' is missing or empty in ${CONFIG_FILE}. Branch protection cannot be asserted without it; no protection changed."
   TARGET_LABEL="protected"
@@ -229,7 +288,7 @@ if [ "$FLOOR" = "release" ]; then
 else
   # Opt-in gate FIRST: absent / "none" is the default and a reported no-op, so a
   # repo that never opted in cannot have its integration branch protected here.
-  INTEGRATION_PROTECTION="$(jq -r '.integrationProtection // empty' "$CONFIG_FILE")"
+  INTEGRATION_PROTECTION="$(jq -r '.integrationProtection // empty' "$CONFIG_FILE" | strip_cr)"
   case "$INTEGRATION_PROTECTION" in
     ""|none)
       echo "milestone-bootstrapper: integration protection is not opted in ('integrationProtection' absent or \"none\" in ${CONFIG_FILE}) — nothing changed."
@@ -238,7 +297,7 @@ else
     *)
       fail "key 'integrationProtection' must be one of none|floor in ${CONFIG_FILE} (got: ${INTEGRATION_PROTECTION}). No protection changed." ;;
   esac
-  TARGET_BRANCH="$(jq -r '.integrationBranch // empty' "$CONFIG_FILE")"
+  TARGET_BRANCH="$(jq -r '.integrationBranch // empty' "$CONFIG_FILE" | strip_cr)"
   [ -n "$TARGET_BRANCH" ] \
     || fail "key 'integrationBranch' is missing or empty in ${CONFIG_FILE}. Integration-branch protection cannot be asserted without it; no protection changed."
   TARGET_LABEL="integration"
@@ -327,7 +386,7 @@ CURRENT="$(gh api "repos/${SLUG}/branches/${TARGET_BRANCH}/protection" 2>/dev/nu
 # decision c). Placed BEFORE the merge — and so before the --dry-run print — so a
 # `plan` preview surfaces the deadlock instead of previewing an impossible write.
 if [ "$FLOOR" = "integration" ] && [ "$CURRENT" != "null" ] \
-   && [ "$(printf '%s' "$CURRENT" | jq -r '.enforce_admins.enabled // false')" = "true" ]; then
+   && [ "$(printf '%s' "$CURRENT" | jq -r '.enforce_admins.enabled // false' | strip_cr)" = "true" ]; then
   echo "milestone-bootstrapper: 🔴 refusing to apply the integration floor to '${TARGET_BRANCH}' on '${SLUG}': that branch already carries enforce_admins:true (the release-grade floor). Leaving it in place DEADLOCKS the integration branch — admins cannot override a failing, pending, or broken required check, so the driver's PRs and any baseline PR can never land. Nothing was changed: this script never weakens protection it did not author, and it has no --force path." >&2
   echo "milestone-bootstrapper: clearing it is the one destructive act, so a human performs it knowingly. To clear it, run:" >&2
   echo "  gh api -X DELETE repos/${SLUG}/branches/${TARGET_BRANCH}/protection/enforce_admins" >&2
@@ -375,7 +434,7 @@ MERGE_FILTER='. as $cur | {
   allow_force_pushes: false,
   allow_deletions: false
 }'
-PUT_BODY="$(printf '%s' "$CURRENT" | jq --argjson contexts "$CONTEXTS_JSON" --argjson enforceAdmins "$ENFORCE_ADMINS" "$MERGE_FILTER")"
+PUT_BODY="$(printf '%s' "$CURRENT" | jq --argjson contexts "$CONTEXTS_JSON" --argjson enforceAdmins "$ENFORCE_ADMINS" "$MERGE_FILTER" | strip_cr)"
 
 # Normalize the existing protection into the same flat PUT shape (no floor added,
 # no UNION/MAX) so an exact match against the merged target means "already at or
@@ -410,7 +469,7 @@ NORMALIZE_FILTER='. as $cur | {
 }'
 
 # The contexts the merged PUT actually carries (UNION result), for display.
-CONTEXTS_DISPLAY="$(printf '%s' "$PUT_BODY" | jq -r '.required_status_checks.contexts | join(", ")')"
+CONTEXTS_DISPLAY="$(printf '%s' "$PUT_BODY" | jq -r '.required_status_checks.contexts | join(", ")' | strip_cr)"
 
 # --- Preview (--dry-run): print the exact MERGED PUT body; write nothing ------
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -426,7 +485,7 @@ fi
 # merge added nothing — the repo is already at or above the floor, so writing
 # would be a pointless re-PUT. (On a fresh repo CURRENT is 'null', so the
 # normalized existing differs from the floor target and we proceed to write.)
-NORM_CURRENT="$(printf '%s' "$CURRENT" | jq --argjson enforceAdmins "$ENFORCE_ADMINS" "$NORMALIZE_FILTER")"
+NORM_CURRENT="$(printf '%s' "$CURRENT" | jq --argjson enforceAdmins "$ENFORCE_ADMINS" "$NORMALIZE_FILTER" | strip_cr)"
 if [ "$NORM_CURRENT" = "$PUT_BODY" ]; then
   echo "milestone-bootstrapper: branch protection already meets the suite floor on ${SLUG} branch '${TARGET_BRANCH}' (no change)."
   echo "milestone-bootstrapper: required status checks: ${CONTEXTS_DISPLAY}${NOOP_ADMINS_SUFFIX}."
@@ -459,9 +518,9 @@ put_protection() {
 # failed GET or a floor not holding.
 read_back_protection() {
   VERIFY="$(gh api "repos/${SLUG}/branches/${TARGET_BRANCH}/protection" 2>/dev/null)" || return 1
-  PR_REQUIRED="$(printf '%s' "$VERIFY" | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')"
-  ADMINS_ENFORCED="$(printf '%s' "$VERIFY" | jq -r '.enforce_admins.enabled // false')"
-  HAS_CONTEXTS="$(printf '%s' "$VERIFY" | jq -r '(.required_status_checks.contexts // []) | length')"
+  PR_REQUIRED="$(printf '%s' "$VERIFY" | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end' | strip_cr)"
+  ADMINS_ENFORCED="$(printf '%s' "$VERIFY" | jq -r '.enforce_admins.enabled // false' | strip_cr)"
+  HAS_CONTEXTS="$(printf '%s' "$VERIFY" | jq -r '(.required_status_checks.contexts // []) | length' | strip_cr)"
   [ "$PR_REQUIRED" = "yes" ] && [ "$ADMINS_ENFORCED" = "$ENFORCE_ADMINS" ] && [ "${HAS_CONTEXTS:-0}" -ne 0 ]
 }
 

@@ -81,6 +81,43 @@
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq opens stdout in TEXT mode, so every `\n` it writes becomes
+# `\r\n` and any jq value the shell consumes as TEXT carries a stray `\r`. Cause,
+# mechanism, and the `s/\r$//` rationale are documented once in the canonical
+# block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Exactly ONE stream here needs it: NEW_CONTENT, the serialized feeder.json. It is
+# never re-parsed as JSON in-script — it is consumed as TEXT, and whenever the
+# assembled object is MULTI-line the usual msys accident does not save it:
+# `$(...)` strips only the TRAILING newline, so every interior CR survives. That
+# case is LIVE, not latent (measured on jq-1.8.1: 3 CR bytes in the emitted
+# feeder.json). It costs:
+#   - the write itself. `printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE"` persists CRLF
+#     into feeder.json, breaking the byte-identical-with-the-.ps1-twin contract
+#     these writers maintain (the twin uses ConvertTo-Json and emits LF).
+#   - the idempotency compare `[ "$(cat "$CONFIG_FILE")" = "$NEW_CONTENT" ]`
+#     whenever the on-disk file is LF — one written by the .ps1 twin, by a POSIX
+#     run, or checked out by git. `cat` yields LF, the CRLF NEW_CONTENT never
+#     matches, and the script rewrites an already-correct file as CRLF.
+#   - the trailing `echo "$NEW_CONTENT"` display.
+# LATENT, and folded by the same seam: the empty-object guard
+# `[ "$NEW_CONTENT" = "{}" ]` (issue #77). `{}` is SINGLE-line, and on the msys
+# toolchain this script was developed against `$(...)` strips a trailing CRLF
+# WHOLE, so the guard fires correctly today (measured). That is a TOOLCHAIN
+# behavior, not a guarantee. If a CR ever did survive, an all-default run would
+# WRITE `{}` instead of leaving the file absent — defeating milestone-feeder's
+# absent-only first-run `setup` trigger, the exact regression #77 exists to
+# prevent, and doing it silently: exit 0, success message, wrong outcome.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe.
+#
+# EXEMPT — do NOT "fix" the `command -v jq` presence check below.
+#
+# `set -o pipefail` is in force above, so making the NEW_CONTENT capture a
+# PIPELINE does not swallow a jq failure: jq's non-zero status still propagates
+# to the `if !` error branch. Same shape as write-project-docs.sh:211.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Bundled defaults (mirror milestone-feeder/docs/profile-schema.md) ---------
 readonly DEFAULT_PROJECT_DOCS=".project/"
 
@@ -147,7 +184,7 @@ if [ "$VERSIONING" != "$UNSET" ]; then
   args+=(--arg versioning "$VERSIONING")
 fi
 
-if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1)"; then
+if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1 | strip_cr)"; then
   echo "ERROR: failed to serialize feeder.json: ${NEW_CONTENT}" >&2
   exit 2
 fi
