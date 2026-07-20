@@ -109,7 +109,7 @@ Compose Step 1's answers + Step 2's signals into the plan's two job sections, pe
 | `domainSkills` / `nonNegotiables` | deduped **union** across app-roots (§2 detection / §A capture) | `add` |
 | `stack` / `stackVersionFile` | §2 detection enum / `versionFile` column (PATH, omitted if empty) | `add` |
 | `versioning` | Tier 6 — **DUAL-WRITE**: `driver.json#versioning` **boolean** (emits only `false`; omitted=versioned); `feeder.json#versioning` **string enum** `"semver"` \| `"none"` (`milestone-feeder/docs/profile-schema.md:52`). Versioned → omit/`"semver"`; non-versioned → `false`/`"none"`; skipped/`[TBD]` → omit both. | `add`/`patch` |
-| `feeder.json#projectDocs` / `reviewer` | when non-default | `add` |
+| `feeder.json#projectDocs` | when non-default | `add` |
 | Version-file / bump target (Tier 6) | `captured` (`.claude-plugin/plugin.json`) plugin repo; `none` for `versioning: none`; **`[TBD]` 🔴** non-plugin w/ no version file resolved ([BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2). | `human-owned` |
 | Label taxonomy | One entry per label, from the authoritative set (`SPEC.md` §6.3). | `add` |
 | Branch model | One entry per branch (integration, protected) + default-branch policy; never delete (`SPEC.md` §6.3). | `add` |
