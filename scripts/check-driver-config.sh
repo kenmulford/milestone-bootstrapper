@@ -80,6 +80,45 @@ readonly DRIVER_REL='.milestone-config/driver.json'
 readonly RUBY_RAILS='Ruby (Rails)'
 readonly RUBY_GENERIC='Ruby (generic)'
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# Mechanism, the `s/\r$//` fold, and why it is a no-op on a POSIX/LF jq: see the
+# canonical block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Unlike the siblings, the damage here is ALREADY LIVE, because the diff-set
+# captures below are MULTI-LINE:
+#   - bash `$(...)` strips the TRAILING newline but keeps every INTERIOR one, so
+#     in a multi-entry diff set every element EXCEPT the last comes back with a
+#     `\r` glued to it. (Measured: `$(jq -rn '["a","b","c"]|.[]')` = 2 CRs.) A
+#     single-entry set is the trailing case and comes back clean — which is why
+#     this reproduces only with 2+ entries and hid for so long.
+#   - the CR'd element is then passed to the contributor lookup as `jq --arg s`,
+#     `index($s)` misses, `contrib` resolves to the empty string, and the drift
+#     line renders `detected by app stack ''` — a WRONG, human-facing report that
+#     still exits 0. Exactly the silent class of failure an exit-code-only check
+#     cannot see (the same trap #85 hit in write-project-docs.sh).
+#   - the two COUNT captures are integers consumed as shell TEXT by the `-gt 0`
+#     tests. A CR'd count makes `[ "2<CR>" -gt 0 ]` fail with "integer expression
+#     expected"; because that test sits in an `if` CONDITION, `set -e` does not
+#     apply — it simply evaluates FALSE, the drift loop is skipped, and the run
+#     under-reports drift and exits 0. Silent again. They are clean on today's
+#     msys toolchain (see below) but they are text-consumed, so they are folded
+#     too — per #85's exhaustive "every stream consumed as TEXT" principle.
+# So every jq stream this script consumes as TEXT goes through this one seam —
+# all five: the two diff sets, their two counts, and the `contrib` join. On a
+# POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally is safe.
+#
+# EXEMPT: jq output re-parsed as JSON rather than read as text — the per-row
+# `domainSkills` cell validation and the driver.json `domainSkills` gate (both
+# `jq -e ... >/dev/null`: exit code only, no text consumed), `APP_OBJS` (re-parsed
+# by `jq -s`), and `APP_JSON` / `RECORDED_JSON` / `DETECTED_JSON` (fed straight
+# back to jq via `--argjson`). CR is legal JSON whitespace, so those need no fold
+# — the same exemption write-project-docs.sh:111-113 draws.
+#
+# Why the siblings' SINGLE-line captures only LOOK safe (msys `$(...)` strips a
+# trailing CRLF whole — a toolchain behavior, not a guarantee): see
+# write-project-docs.sh:115-120. The multi-line captures here never had that
+# cover, which is why the bug is live in this script and latent in the siblings.
+strip_cr() { sed $'s/\r$//'; }
+
 CHECK=0
 REPO="$PWD"
 
@@ -221,16 +260,16 @@ RECORDED_JSON="$(jq -c '.domainSkills | unique' "$DRIVER")"
 DETECTED_JSON="$(printf '%s' "$APP_JSON" | jq -c '[.[].skills[]] | unique')"
 
 # recorded - detected  and  detected - recorded (both sorted, duplicates collapsed).
-RECORDED_NOT_DETECTED="$(jq -rn --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($r - $d) | sort | .[]')"
-DETECTED_NOT_RECORDED="$(jq -rn --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($d - $r) | sort | .[]')"
+RECORDED_NOT_DETECTED="$(jq -rn --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($r - $d) | sort | .[]' | strip_cr)"
+DETECTED_NOT_RECORDED="$(jq -rn --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($d - $r) | sort | .[]' | strip_cr)"
 # Loop-entry signal is the jq ARRAY LENGTH (an unambiguous integer), NOT the captured
 # string's emptiness. bash `$(...)` strips ALL trailing newlines, so a diff set whose
 # SOLE element is a genuine empty string "" (raw jq output "\n") collapses to a literal
 # empty capture — byte-for-byte identical to the zero-element case. Testing the string
 # with `[ -n ... ]` would then treat that real single empty-string entry as "no diff"
 # and silently under-report drift. The count is derived from the SAME set expressions.
-RECORDED_NOT_DETECTED_COUNT="$(jq -n --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($r - $d) | length')"
-DETECTED_NOT_RECORDED_COUNT="$(jq -n --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($d - $r) | length')"
+RECORDED_NOT_DETECTED_COUNT="$(jq -n --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($r - $d) | length' | strip_cr)"
+DETECTED_NOT_RECORDED_COUNT="$(jq -n --argjson r "$RECORDED_JSON" --argjson d "$DETECTED_JSON" '($d - $r) | length' | strip_cr)"
 
 DRIFT_LINES=()
 # Gate on the integer count, not the WHOLE variable's emptiness: a bash `<<<"$VAR"`
@@ -247,7 +286,7 @@ fi
 if [ "$DETECTED_NOT_RECORDED_COUNT" -gt 0 ]; then
   while IFS= read -r skill; do
     # Which non-exempt app-stack row(s) contributed this skill (sorted, joined by ", ").
-    contrib="$(printf '%s' "$APP_JSON" | jq -r --arg s "$skill" '[.[] | select(.skills | index($s)) | .stack] | unique | sort | join(", ")')"
+    contrib="$(printf '%s' "$APP_JSON" | jq -r --arg s "$skill" '[.[] | select(.skills | index($s)) | .stack] | unique | sort | join(", ")' | strip_cr)"
     DRIFT_LINES+=("DRIFT — domainSkills '${skill}' detected by app stack '${contrib}' but absent from driver.json")
   done <<< "$DETECTED_NOT_RECORDED"
 fi

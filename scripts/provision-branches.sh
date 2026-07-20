@@ -50,6 +50,35 @@
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# Mechanism, the `s/\r$//` fold, and why it is a no-op on a POSIX/LF jq: see the
+# canonical block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Here the damage is LATENT, not live — worth recording so nobody "proves" it is
+# safe and removes the seam:
+#   - the two branch-name captures below are SINGLE-line, and on the msys
+#     toolchain this script was developed against, `$(...)` strips a trailing
+#     CRLF WHOLE, so they come back clean today (measured CR=0). That is a
+#     TOOLCHAIN behavior, not a guarantee — WSL bash invoking a Windows `jq.exe`
+#     need not do it, and the multi-line form of the same pattern is ALREADY
+#     broken in check-driver-config.sh (issue #158).
+#   - if a CR ever did survive, it rides straight into a REST path:
+#     `gh api repos/${SLUG}/git/ref/heads/${BRANCH}`. A CR'd branch name 404s, so
+#     `base_sha` silently returns empty and the run reports the empty-repo
+#     precondition instead of the real cause — a misleading failure, not a loud
+#     one. Cheap to prevent, expensive to diagnose.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe.
+#
+# EXEMPT — do NOT "fix" these:
+#   - the `jq -e .` config validation below: exit code only, no text consumed.
+#   - EVERY `gh api --jq` site in this file (the SLUG lookup, both `base_sha`
+#     ref reads, the default-branch reads, and the read-back verification).
+#     `--jq` is gh's BUILT-IN Go jq, not the external `jq` binary: it writes
+#     bytes directly with no Windows text-mode translation and emits plain `\n`,
+#     zero CR (verified empirically on gh 2.87.3). Piping those through the seam
+#     would add cost and imply a hazard that is not there.
+strip_cr() { sed $'s/\r$//'; }
+
 REPO="."
 DRY_RUN=0
 
@@ -109,8 +138,8 @@ fi
 
 # jq '// empty' collapses an absent key, JSON null, AND an empty string to the
 # same "missing" signal — so each is reported by name with the file path.
-PROTECTED_BRANCH="$(jq -r '.protectedBranch // empty' "$CONFIG_FILE")"
-INTEGRATION_BRANCH="$(jq -r '.integrationBranch // empty' "$CONFIG_FILE")"
+PROTECTED_BRANCH="$(jq -r '.protectedBranch // empty' "$CONFIG_FILE" | strip_cr)"
+INTEGRATION_BRANCH="$(jq -r '.integrationBranch // empty' "$CONFIG_FILE" | strip_cr)"
 
 [ -n "$PROTECTED_BRANCH" ] \
   || fail "key 'protectedBranch' is missing or empty in ${CONFIG_FILE}. The branch model cannot be provisioned without it; no branch created, no policy changed."

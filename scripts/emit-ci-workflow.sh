@@ -84,6 +84,35 @@ set -euo pipefail
 readonly UNIT_TESTS_CONTEXT="unit-tests"
 readonly PREFLIGHT_CONTEXT="preflight"
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# Mechanism, the `s/\r$//` fold, and why it is a no-op on a POSIX/LF jq: see the
+# canonical block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Here the damage is LATENT, not live — but the blast radius is the worst in the
+# suite, because these jq values are not just USED, they are EMBEDDED IN AN
+# EMITTED ARTIFACT:
+#   - `INTEGRATION_BRANCH` becomes `BRANCH_FILTER`, which is written into the
+#     workflow's `on: pull_request: branches:` filter. A CR'd value emits a
+#     branch filter that matches NOTHING, so CI never triggers on any PR — while
+#     the file stays valid YAML, this writer still exits 0, and branch protection
+#     (#12) still registers contexts that will never report. A merge gate that
+#     silently never runs is strictly worse than one that fails loudly.
+#   - `UNIT_TEST_CMD` / `PREFLIGHT_CMD` are embedded as `run:` steps; a trailing
+#     CR inside a YAML scalar is a shell-visible character in the executed
+#     command.
+#   - `STACK` drives setup-step selection by string compare (a CR'd value matches
+#     no branch -> the setup step silently vanishes); `STACK_VERSION_FILE` is
+#     emitted as a path.
+# All five are consumed as TEXT, so all five go through this one seam. On a POSIX
+# jq (LF stdout) the seam is a no-op, so applying it unconditionally is safe: the
+# emitted YAML is BYTE-IDENTICAL on any input that was not already CR-damaged
+# (verified with `cmp` when this landed).
+#
+# EXEMPT: `DRIVER_JSON` — it is re-parsed as JSON by every read below, not
+# consumed as text, and CR is legal JSON whitespace. The
+# `jq -e 'type=="object"'` shape gate is exit-code only. Folding either would be
+# pointless. Same exemption as write-project-docs.sh:111-113.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Inputs (arg overrides env; env overrides default) -------------------------
 REPO="${CI_EMIT_REPO:-.}"
 
@@ -132,17 +161,17 @@ fi
 # Extract the three values. jq prints an empty string for an absent/null key, so
 # an absent key is indistinguishable from "" here — both mean "not recorded",
 # which is exactly the [TBD]-flag trigger below.
-INTEGRATION_BRANCH="$(printf '%s' "$DRIVER_JSON" | jq -r '.integrationBranch // "" | if type=="string" then . else "" end')"
-UNIT_TEST_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.unitTestCmd       // "" | if type=="string" then . else "" end')"
-PREFLIGHT_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.preflightCmd      // "" | if type=="string" then . else "" end')"
+INTEGRATION_BRANCH="$(printf '%s' "$DRIVER_JSON" | jq -r '.integrationBranch // "" | if type=="string" then . else "" end' | strip_cr)"
+UNIT_TEST_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.unitTestCmd       // "" | if type=="string" then . else "" end' | strip_cr)"
+PREFLIGHT_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.preflightCmd      // "" | if type=="string" then . else "" end' | strip_cr)"
 
 # stack / stackVersionFile (#63's output) — CONSUMED, never re-detected (the
 # consume-not-detect contract above). `stack` is the runtime family the emitter
 # scaffolds a per-job setup STEP for; `stackVersionFile` is the optional version-
 # file path that pins the toolchain. Both absent on a pre-#63 (or stack-less)
 # driver.json — that yields NO setup step and the byte-identical two-job frame.
-STACK="$(printf '%s' "$DRIVER_JSON"              | jq -r '.stack            // "" | if type=="string" then . else "" end')"
-STACK_VERSION_FILE="$(printf '%s' "$DRIVER_JSON" | jq -r '.stackVersionFile // "" | if type=="string" then . else "" end')"
+STACK="$(printf '%s' "$DRIVER_JSON"              | jq -r '.stack            // "" | if type=="string" then . else "" end' | strip_cr)"
+STACK_VERSION_FILE="$(printf '%s' "$DRIVER_JSON" | jq -r '.stackVersionFile // "" | if type=="string" then . else "" end' | strip_cr)"
 
 # --- Resolve the trigger branch (flag-don't-guess when absent) -----------------
 # An absent integrationBranch is flagged and rendered as a [TBD] branch filter —
