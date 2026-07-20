@@ -249,11 +249,21 @@ switch ($Stack) {
         } else {
             $PythonVersionInput = "          python-version: '3.x'"
         }
+        # Dependency install, shared by BOTH jobs via $SetupBlock: setup-python
+        # installs the interpreter, NOT the project's packages. Order is
+        # deliberate — pytest first as a floor for repos declaring no test
+        # runner, requirements.txt LAST so any pin it carries wins (do NOT
+        # reorder). Absent requirements.txt warns; a real failure fails the job.
         $SetupSteps = @(
             '      - name: Set up Python'
             '        uses: actions/setup-python@v6'
             '        with:'
             $PythonVersionInput
+            '      - name: Install dependencies'
+            '        run: |'
+            '          python -m pip install --upgrade pip'
+            '          pip install pytest'
+            '          if [ -f requirements.txt ]; then pip install -r requirements.txt; else echo "::warning::milestone-bootstrapper: no requirements.txt at the repo root — only pytest was installed. If dependencies live in pyproject.toml/poetry/uv, add an install step."; fi'
         ) -join "`n"
     }
     { $_ -eq 'dotnet' -or $_ -eq 'maui' } {
