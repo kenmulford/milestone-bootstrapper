@@ -62,6 +62,18 @@
 #   to schema parity — that would re-introduce the drift this exemption prevents.
 #   Resolves #66 (schema convergence — decided: permanent exemption, not converge).
 #
+#   GUARDRAIL EXEMPTION — integrationProtection (PERMANENT, by design):
+#   `integrationProtection` is an INTENTIONALLY-emitted additive key that is
+#   PERMANENTLY exempt from the sibling driver schema (milestone-driver/docs/
+#   profile-schema.md) — NOT a temporary ship-ahead. The milestone-driver plugin
+#   never consumes this key; only THIS bootstrapper's provision-protection reads it
+#   back, as the opt-in gate for the integration-branch floor. A schema documents
+#   what its plugin consumes, so this bootstrapper-owned key is canonically
+#   documented in this repo's SPEC §6.1 and deliberately kept OUT of the driver's
+#   schema. The guardrail still governs EVERY OTHER key against schema parity; do
+#   NOT "un-widen" this key back to schema parity — that would re-introduce the
+#   drift this exemption prevents. (Issue #93 decision a.)
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   -Repo <dir>               target repo root (default: current directory)
@@ -94,11 +106,17 @@
 #     -StackVersionFile <str>   the detected version-file path (e.g. ".nvmrc",
 #                               ".python-version", "global.json"). OMITTED when not
 #                               passed — never written as null/empty.
+#     -IntegrationProtection <enum>  whether the integration branch carries a
+#                               protection floor, one of none|floor.
+#                               absent-means-default: `none` (or omitted) => OMIT the
+#                               key; `floor` => write it. An unknown value is a bad
+#                               input (exit 1). Read back ONLY by this repo's
+#                               provision-protection -Floor integration.
 #   Env fallbacks (params win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
 #     DRIVER_DOMAIN_SKILLS, DRIVER_NON_NEGOTIABLES, DRIVER_UI_SURFACE_GLOBS,
 #     DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING,
-#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE.
+#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE, DRIVER_INTEGRATION_PROTECTION.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -137,7 +155,8 @@ param(
     # typed as object so `-Versioning:$false` and `-Versioning false` both work.
     [object]$Versioning,
     [string]$Stack,
-    [string]$StackVersionFile
+    [string]$StackVersionFile,
+    [string]$IntegrationProtection
 )
 
 $ErrorActionPreference = 'Stop'
@@ -197,6 +216,13 @@ if (-not $bound.ContainsKey('Stack')) {
 # stackVersionFile tracks supplied-ness like the other optional string keys, so an
 # unset value is OMITTED (distinct from a passed empty value, which is a bad input).
 $stackVersionFileIn = if ($bound.ContainsKey('StackVersionFile')) { @{ Supplied = $true; Value = $StackVersionFile } } elseif ($null -ne $env:DRIVER_STACK_VERSION_FILE -and $env:DRIVER_STACK_VERSION_FILE -ne '') { @{ Supplied = $true; Value = $env:DRIVER_STACK_VERSION_FILE } } else { @{ Supplied = $false } }
+# integrationProtection: param wins, else env, else empty (omit-when-`none`/empty).
+# Same arg-empty(error) / env-empty(omit) split as -Stack above, mirroring the bash
+# twin's `${2:?--integration-protection needs a value}` parse guard.
+$integrationProtectionArgEmpty = $bound.ContainsKey('IntegrationProtection') -and [string]::IsNullOrEmpty($IntegrationProtection)
+if (-not $bound.ContainsKey('IntegrationProtection')) {
+    $IntegrationProtection = if ($env:DRIVER_INTEGRATION_PROTECTION) { $env:DRIVER_INTEGRATION_PROTECTION } else { '' }
+}
 
 # --- Validate the three Core keys (all-or-refuse; no partial profile) ----------
 # Schema:91-95,134-142 — the three Core keys are required in the file.
@@ -306,6 +332,27 @@ if (-not [string]::IsNullOrEmpty($Stack)) {
     }
 }
 
+# --- Validate integrationProtection (omit-when-default; `none`/unset => OMIT) ---
+# The enum is none|floor, default `none` (SPEC §6.1). `none` (and a genuinely unset
+# value) means "omit the key", so it is VALID input; `floor` is the only value ever
+# written. An explicitly passed empty `-IntegrationProtection ''` is a BAD INPUT,
+# not `none` — it errors + exit 1 (parity with the -Stack empty->error path above).
+$writeIntegrationProtection = $false
+if ($integrationProtectionArgEmpty) {
+    [Console]::Error.WriteLine("ERROR: -IntegrationProtection must be one of none|floor (got: ).")
+    exit 1
+}
+if (-not [string]::IsNullOrEmpty($IntegrationProtection)) {
+    switch ($IntegrationProtection) {
+        'floor' { $writeIntegrationProtection = $true }
+        'none'  { $writeIntegrationProtection = $false }  # default => omit
+        default {
+            [Console]::Error.WriteLine("ERROR: -IntegrationProtection must be one of none|floor (got: $IntegrationProtection).")
+            exit 1
+        }
+    }
+}
+
 # --- Assemble the object in canonical key order (Core first, then optional) -----
 # An ordered hashtable preserves key order in the serialized JSON. Add only keys
 # the plan supplied. implementerAgent is intentionally never added.
@@ -334,6 +381,12 @@ if ($e2eEnvIn.Supplied)         { $obj['e2eEnv'] = $e2eEnvVal }
 # the .sh twin so output stays byte-identical.
 if ($writeStack)                  { $obj['stack'] = $Stack }
 if ($stackVersionFileIn.Supplied) { $obj['stackVersionFile'] = $stackVersionFileIn.Value }
+# integrationProtection: a bootstrapper-owned additive key permanently exempt from
+# the driver schema (see GUARDRAIL EXEMPTION above). Written only for `floor` — a
+# key at its default (`none`) is not written (SPEC.md:271-273), same discipline as
+# the `versioning` boolean. LAST slot, adjacent to the other bootstrapper-owned
+# keys. Same slot as the .sh twin so output stays byte-identical.
+if ($writeIntegrationProtection)  { $obj['integrationProtection'] = $IntegrationProtection }
 
 try {
     $NewContent = ($obj | ConvertTo-Json -Depth 10 -Compress:$false)

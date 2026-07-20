@@ -38,7 +38,7 @@ The precondition only gates *remote-dependent* entries — never the interview, 
 
 ### Step 1 — Run the understanding interview (#4)
 
-Run the interview as `docs/understanding-interview.md` defines it (tier order, recording discipline); this step **invokes** it, tier-by-tier (§1, Tier order):
+Run the interview as `docs/understanding-interview.md` defines it (tier order, recording discipline); this step **invokes** it, tier-by-tier (§1, Tier order + gate questions):
 
 | Tier | Captures | Target doc(s) |
 |---|---|---|
@@ -99,7 +99,7 @@ Compose Step 1's answers + Step 2's signals into the plan's two job sections, pe
 
 **Bake the app-roots into the emitted globs (root-absolute, at scaffold time)** — prefix each app-root onto that root's `sourceGlobs`/`uiSurfaceGlobs` (`SPEC.md` §4.1, §6.1). Default `["."]` is a no-op — globs unchanged (no-regression guarantee, §4.1). For nested/multi-root `appRoots`, see `references/nested-app-roots.md`.
 
-**Section B — suite-readiness (Job 2, supporting)** — record only non-default/create-if-missing entries (`SPEC.md` §6). Configs are machine-owned, never `human-owned` (`SPEC.md` §6.1); **no `appRoots` key is ever written** (plan-file-only, `SPEC.md` §4.1, §6.1).
+**Section B — suite-readiness (Job 2, supporting)** — record only non-default/create-if-missing entries. Configs are machine-owned, never `human-owned`; **no `appRoots` key is ever written** (plan-file-only; `SPEC.md` §6, §6.1, §4.1).
 
 | Entry | Detail | Reconcile |
 |---|---|---|
@@ -108,15 +108,16 @@ Compose Step 1's answers + Step 2's signals into the plan's two job sections, pe
 | `unitTestCmd` / `preflightCmd` / `e2eEnv` (or `none`) | [detected](references/stack-detection-mapping.md) | `add` |
 | `domainSkills` / `nonNegotiables` | deduped **union** across app-roots (§2 detection / §A capture) | `add` |
 | `stack` / `stackVersionFile` | §2 detection enum / `versionFile` column (PATH, omitted if empty) | `add` |
-| `versioning` | Tier 6 — **DUAL-WRITE**: `driver.json#versioning` **boolean** (emits only `false`; omitted=versioned); `feeder.json#versioning` **string enum** `"semver"` \| `"none"` (`milestone-feeder/docs/profile-schema.md:52`). Versioned → omit/`"semver"`; non-versioned → `false`/`"none"`; skipped/`[TBD]` → omit both. | `add`/`patch` |
+| `integrationProtection` | §1 gate — `floor` when opted in; omit for `none`/skip | `add` |
+| `versioning` | Tier 6 — **DUAL-WRITE**: `driver.json#versioning` **boolean**; `feeder.json#versioning` **string enum** (`milestone-feeder/docs/profile-schema.md:52`). Versioned → omit/`"semver"`; non-versioned → `false`/`"none"`; skipped/`[TBD]` → omit both. | `add`/`patch` |
 | `feeder.json#projectDocs` | when non-default | `add` |
-| Version-file / bump target (Tier 6) | `captured` (`.claude-plugin/plugin.json`) plugin repo; `none` for `versioning: none`; **`[TBD]` 🔴** non-plugin w/ no version file resolved ([BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2). | `human-owned` |
-| Label taxonomy | One entry per label, from the authoritative set (`SPEC.md` §6.3). | `add` |
-| Branch model | One entry per branch (integration, protected) + default-branch policy; never delete (`SPEC.md` §6.3). | `add` |
-| Branch protection | No direct push, PR required, CI status check required, optional review. **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | `patch` |
-| CI workflow | `.github/workflows/` path running `unitTestCmd`/`preflightCmd` on PRs into the integration branch, the required check. **🔴 blocked-on-precondition when Step 0 flagged `gh`.** | `add`/`patch` |
+| Version-file / bump target (Tier 6) | `captured` (`.claude-plugin/plugin.json`) plugin repo; `none` for `versioning: none`; **`[TBD]` 🔴** non-plugin, no version file ([BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2). | `human-owned` |
+| Label taxonomy | One per label, from the authoritative set (`SPEC.md` §6.3). | `add` |
+| Branch model | One per branch (integration, protected) + default-branch policy; never delete (`SPEC.md` §6.3). | `add` |
+| Branch protection | No direct push, PR + CI check required, optional review. | `patch` |
+| CI workflow | `.github/workflows/` path running `unitTestCmd`/`preflightCmd` on PRs into the integration branch, the required check. | `add`/`patch` |
 
-Apply each entry's reconcile class + state from the Step 3 delta. Record the **safe write order** (`SPEC.md` §7): 1) project docs, 2) configs, 3) labels, 4) branch model → protection → CI.
+Apply each entry's reconcile class + state from the Step 3 delta. Record the **safe write order** (`SPEC.md` §7): 1) project docs, 2) configs, 3) labels, 4) branch model → protection → CI. Protection + CI are **🔴 blocked-on-precondition when Step 0 flagged `gh`.**
 
 ### Step 5 — Assemble + write the plan file
 

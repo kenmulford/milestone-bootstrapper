@@ -33,6 +33,7 @@ where to look for those.
 | `versioning` | Only when your project is explicitly non-versioned | `false` means don't bump a version per PR. Left out entirely means versioned — this key is only ever written as `false`, never `true`. |
 | `stack` | When a runtime stack was detected | Which runtime family (Node, Python, .NET, etc.) the CI workflow is scaffolded for. |
 | `stackVersionFile` | When a version-file was found | The path to your stack's version-pin file (e.g. `.nvmrc`, `.python-version`). |
+| `integrationProtection` | Only when you opted the integration branch into a protection floor | `"floor"` gates your integration branch with a pull request and required CI checks, while still letting admins override — so a transient CI break can't wedge the branch `milestone-driver` merges into. Left out entirely (the default, `"none"`) means the integration branch stays unprotected and the driver's pull requests merge ungated. |
 
 Every optional key above is left out of the file entirely when it's at its
 default — an absent key always means "use the default," never "value not yet
