@@ -105,7 +105,7 @@ Compose Step 1's answers + Step 2's signals into the plan's two job sections, pe
 |---|---|---|
 | `integrationBranch` / `protectedBranch` | branch model | `add` |
 | `sourceGlobs` / `uiSurfaceGlobs` (or `none`) | root-absolute, app-root-prefixed (above) | `add`/`patch` |
-| `unitTestCmd` / `preflightCmd` / `e2eEnv` (or `none`) | detected | `add` |
+| `unitTestCmd` / `preflightCmd` / `e2eEnv` (or `none`) | [detected](references/stack-detection-mapping.md) | `add` |
 | `domainSkills` / `nonNegotiables` | deduped **union** across app-roots (§2 detection / §A capture) | `add` |
 | `stack` / `stackVersionFile` | §2 detection enum / `versionFile` column (PATH, omitted if empty) | `add` |
 | `versioning` | Tier 6 — **DUAL-WRITE**: `driver.json#versioning` **boolean** (emits only `false`; omitted=versioned); `feeder.json#versioning` **string enum** `"semver"` \| `"none"` (`milestone-feeder/docs/profile-schema.md:52`). Versioned → omit/`"semver"`; non-versioned → `false`/`"none"`; skipped/`[TBD]` → omit both. | `add`/`patch` |
