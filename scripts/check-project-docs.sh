@@ -177,12 +177,12 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 # Read the manifest ONCE, normalizing CRLF -> LF up front (mirroring
-# write-project-docs.sh:194's `sed $'s/\r$//'` convention). A CRLF-terminated
-# manifest would otherwise let the anchor-existence check pass (POSIX
-# `[[:space:]]` swallows the trailing CR) while the extraction's `[ \t]*$` did
-# NOT match the heading, silently yielding an empty section and false drift on
-# every detected stack. BOTH the anchor match and the extraction run against this
-# normalized content.
+# write-project-docs.sh's own CRLF fold at TEMPLATE_CONTENT — `sed $'s/\r$//'`).
+# A CRLF-terminated manifest would otherwise let the anchor-existence check pass
+# (POSIX `[[:space:]]` swallows the trailing CR) while the extraction's `[ \t]*$`
+# did NOT match the heading, silently yielding an empty section and false drift
+# on every detected stack. BOTH the anchor match and the extraction run against
+# this normalized content.
 MANIFEST_CONTENT="$(sed $'s/\r$//' "$MANIFEST")"
 
 # Extract the anchor's section body in a SINGLE pass (found-flag + capture,
