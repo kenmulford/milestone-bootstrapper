@@ -2,6 +2,53 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.8.0 — cross-platform correctness + an integration-branch protection floor
+
+**Theme:** the first real end-to-end bootstrapper → feeder → driver run on a consumer repo surfaced a set of defects that made the bootstrapped result unusable on day one: a red-by-construction Python CI, a branch-protection floor that deadlocked the branch the driver merges into, and a Windows-only jq bug that silently left `.project/` docs unpopulated. This release fixes all three classes, plus one piece of config hygiene.
+
+### ✨ Integration-branch protection
+
+| Issue | PR | What |
+|---|---|---|
+| #93 provision-protection: offer an integration-branch floor | #160 | `provision-protection.{sh,ps1}` gain `--floor release\|integration` / `-Floor`, gated by a new `driver.json#integrationProtection: "none" \| "floor"` key (default `"none"`). The integration floor asserts PR-required + required CI checks with `enforce_admins: false`, so admins and the driver can still override for baselines and transient CI breaks. Release-grade `enforce_admins: true` on the branch the driver merges into deadlocks it. The floor applies **only to an unprotected branch**: a branch already carrying `enforce_admins: true` is left untouched and reported 🔴 with the exact clearing command, preserving the script's never-weaken invariant. The `--floor release` path is byte-identical to v0.7.1's output. |
+
+### 🔧 Fixes
+
+| Issue | PR | What |
+|---|---|---|
+| #92 emit-ci-workflow (Python): no dependency-install step, and a forced preflight job that fails on greenfield layouts | #157 | The `python` case set up the interpreter but emitted no `pip install`, so the `unit-tests` job ran `pytest` with pytest absent and every PR failed `pytest: command not found`. Adds a dependency-install step to the shared `SETUP_BLOCK`, mirroring the `node` path, and installs `requirements.txt` when present (absent emits a `::warning::`, never an error). Also seeds the Python `preflightCmd` toward a dir-robust `python -m compileall .`. **Correction to the issue's premise:** a dir-specific `compileall` does *not* exit non-zero on a missing directory (verified, CPython 3.13.14 — it exits 0). The real defect is quieter: preflight goes green having compiled nothing. |
+| #85 write-project-docs.sh exits 3 on native Windows Git-Bash | #159 | Native-Windows jq opens stdout in text mode, so every `
+` it writes becomes `
+` and every shell consumer receives a stray ``. The anchor pre-flight reported all anchors unmatched and exited 3. Worse, the placement loop carried the same CR, so lookups fell through to their defaults and the template was left **unpopulated at exit 0** — a silent no-op that passes any exit-code-only check. Adds one shared `strip_cr()` seam and folds all five text-consuming jq streams through it. |
+| #158 Sibling scripts consume jq output as shell text — same CRLF bug class | #161, #162 | The same class across six sibling scripts, in two tiers. **Live:** `check-driver-config.sh` rendered silently-wrong drift output (a CR'd `$skill` fed back to `jq --arg` missed, printing ``detected by app stack ''``), and both config writers broke their own idempotency compare while persisting CRLF into the `driver.json` / `feeder.json` every other script reads back. **Latent:** `provision-branches.sh`, `provision-protection.sh`, and `emit-ci-workflow.sh` (where a CR'd `INTEGRATION_BRANCH` is embedded as the emitted workflow's PR branch filter). |
+| #149 feeder.json#reviewer key retired upstream but still written | #151 | milestone-feeder retired its `reviewer` own-key (confirmed in milestone-feeder 0.11.1: `docs/architecture.md:336-338`, `SPEC.md:230`), but `write-feeder-config.{sh,ps1}` never stopped emitting it. Removes the flag, env fallback, validation, default, and JSON assembly from both twins, plus every doc reference. Adds `docs/driver-config-keys.md` and `docs/feeder-config-keys.md`, plain-language per-file key references linked from the README. |
+
+### Consumer notes (upgrading from v0.7.1)
+
+- **New optional key** `driver.json#integrationProtection` (`"none"` | `"floor"`). Absent or `"none"` means today's behavior: the integration branch is left unprotected. Opt in through a re-run of `plan` → `apply`/`update`; the key participates in `update`'s union-write pass-through.
+- **`feeder.json#reviewer` is dropped on the next `update`.** A `feeder.json` written before this release that still carries `reviewer` loses it. This is safe and deliberate: the key has done nothing since milestone-feeder retired it upstream.
+- **The emitted `ci.yml` changes for `stack: python` only.** The emitter's non-clobber write path flags an existing-but-differing workflow rather than overwriting it, so an already-bootstrapped repo does **not** auto-pick this up. Existing repos get the fixed workflow on their next `plan` → `apply`/`update`. Node, dotnet, maui, rust, and stackless output is byte-unchanged.
+- **The Windows jq fixes are pure robustness.** On Linux and macOS, and on the PowerShell twins, output is byte-identical to v0.7.1.
+- **No breaking schema changes** to `.milestone-config/driver.json` or `feeder.json`.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: #157, #159, #160, #161, #162
+
+Known gap carried forward: `scripts/**` has **no CI coverage on any platform** (`.github/workflows/ci.yml` runs only the skill-size gate, on `ubuntu-latest`), and none on Windows, where the entire jq CRLF class lives. That is why #85 reached a user. Not yet filed.
+
+## v0.7.1 — README catalogs five suite plugins
+
+Patch release. Tagged and released on 2026-07-13 without a CHANGELOG entry; backfilled here for completeness.
+
+| Issue | PR | What |
+|---|---|---|
+| #152 README omits milestone-designer | #153 | Two stale suite enumerations in `README.md` listed four plugins, omitting milestone-designer (the pre-plan design phase, now the fifth suite plugin). Both updated to five, with designer inserted in pipeline order: bootstrapper → designer → feeder → driver → coherence-reviewer. |
+
+### Consumer notes
+
+- Documentation only. No code, schema, or behavior change.
+
 ## v0.7.0 — detector-to-config consistency check
 
 **Theme:** `detect-stack` maps each detected stack to a `domainSkills` value seeded into `.milestone-config/driver.json` at bootstrap, but nothing re-verified that config against the detector afterward — the same reactive-only drift hole v0.6.1 closed for `library-manifest.md`, applied to the one other deterministically-checkable field the detector emits. This release closes it, and extends the shipped `check` verb to cover it — no new verb.
