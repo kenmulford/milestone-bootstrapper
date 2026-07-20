@@ -63,6 +63,39 @@ Skip Tier 7 entirely for a repo with no UI surface — an all-`[TBD]`
 (`design-system.md` header comment), so leaving it untouched is *recording*, not
 omission.
 
+### Suite-readiness gate questions (recorded to §B, not to a `.project/` anchor)
+
+A small number of capture fields answer a **suite-readiness** question rather
+than a project-understanding one: their answer lands in the plan file's §B
+(`SPEC.md` §6), not under a `.project/` `##` anchor. Tier 6's versioning answer
+already works this way (it dual-writes `driver.json#versioning` /
+`feeder.json#versioning` alongside its `conventions.md` anchor). Ask these with
+the **same §1 pattern** — label, non-blank default, accept/edit/skip, skip
+consequence on the same line — and the **same §3.2 three states**. They add no
+`##` anchor, so the fixed §2 map below is unchanged.
+
+| Field | Question (ask verbatim) | Records to | Default to show | Skip → |
+|---|---|---|---|---|
+| Integration-branch gate | **"Gate the integration branch with CI checks? (PR + required checks; admins can still override for baselines and transient CI breaks)"** | `driver.json#integrationProtection` — `"floor"` when yes; the key is **omitted** for a recorded "none" | `none` (today's behavior — the integration branch is unprotected) | `none` |
+
+- **Three states, never collapsed** (§3.2): a **yes** is `captured` → `floor`; a
+  deliberate **"no" / "not yet"** is a recorded `none` (**no 🔴**) → the key is
+  omitted; a genuine unknown the human cannot resolve stays `[TBD]` 🔴 and the
+  key is left unwritten, never guessed to `floor`.
+- **Skip consequence (state it verbatim on the prompt line):** *the integration
+  branch stays unprotected and the driver's PRs merge ungated.* Note this field
+  skips to a recorded **`none`**, not to `[TBD]` 🔴 — `none` is the documented
+  default for this key (`SPEC.md` §6.1), so "not answered" and "answered no" land
+  on the same, safe, today's-behavior outcome. That is the one deliberate
+  departure from §3.3 for this field, and it is why the consequence must be
+  stated: skipping is a real choice here, not a deferral.
+- **Why the gate is deliberately weaker than the protected branch's.** The
+  integration branch is the one `milestone-driver` opens a PR into per issue and
+  auto-merges on green. A release-grade `enforce_admins: true` there deadlocks
+  it — a transient or broken required check wedges the branch and no admin can
+  override, so nothing lands (bootstrapper #93). The floor this answer provisions
+  keeps PR + required checks and leaves admins able to override.
+
 ---
 
 ## 2. The capture-field → section map (fixed)
@@ -207,6 +240,13 @@ A skipped field becomes a flagged `[TBD]` 🔴, and the skip prompt must have
 already stated the consequence (§1). Skipping is legitimate; it is *not* the same
 as recording "none" — skip = "unknown, deferred to a human", none = "the user
 answered that it does not exist."
+
+**One documented exception — the suite-readiness gate `integrationProtection`**
+(§1): that field skips to a recorded **`none`**, not to `[TBD]` 🔴, because `none`
+is its documented default (`SPEC.md` §6.1), so "not answered" and "answered no"
+land on the same safe outcome. Do not flag it 🔴 for being unanswered — record
+`none`. It is the only field that departs from the rule above; every other
+skipped field follows §3.3 unchanged.
 
 ---
 

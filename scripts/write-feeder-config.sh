@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # write-feeder-config.sh — write the target repo's `.milestone-config/feeder.json`
-# config slice (the feeder-owned keys: `projectDocs`, `reviewer`, `versioning`).
+# config slice (the feeder-owned keys: `projectDocs`, `versioning`).
 #
 # What this does, in plain terms:
 #   The bootstrapper's `apply` skill (#13) leaves the TARGET repo with the correct
@@ -23,7 +23,6 @@
 #   by the canonical schema doc:
 #     milestone-feeder/docs/profile-schema.md
 #       - "Own keys" table          -> projectDocs (default ".project/"),
-#                                       reviewer    (default "milestone-driver"),
 #                                       versioning  ("semver"|"none"; NO bundled
 #                                                    default — absent = infer-or-ask;
 #                                                    profile-schema.md:52,115-133)
@@ -32,8 +31,8 @@
 #                                       profile to READ, but this writer no longer
 #                                       EMITS it — an all-default slice is left
 #                                       ABSENT (issue #77, see Behavior).
-#   This slice writes the feeder-OWNED keys `projectDocs`, `reviewer`, and
-#   `versioning`. The two `versioning` keys are DISTINCT: this writes
+#   This slice writes the feeder-OWNED keys `projectDocs` and `versioning`. The
+#   two `versioning` keys are DISTINCT: this writes
 #   `feeder.json#versioning` — the feeder's own STRING enum "semver"|"none" (its
 #   read-contract key, profile-schema.md:52), which is NOT the driver's BOOLEAN
 #   `driver.json#versioning` (owned by the driver-config slice #8, ever only
@@ -43,7 +42,8 @@
 #   write the shared/driver keys (uiSurfaceGlobs, integrationBranch, the consumer's
 #   sourceGlobs, domainSkills, nonNegotiables, and the driver's BOOLEAN versioning)
 #   — those are read from the driver config and owned by the driver-config slice
-#   (#8). If the feeder's schema gains or renames an own-key, update this script in
+#   (#8). The feeder retired its `reviewer` own-key, so this writer no longer emits
+#   it. If the feeder's schema gains or renames an own-key, update this script in
 #   lockstep.
 #
 # Inputs (resolved values — this writer does NOT re-derive them):
@@ -51,21 +51,15 @@
 #   --project-docs <str>  the resolved `.project/` path from Job 1
 #                         (default ".project/"; omitted from the file when equal
 #                          to the bundled default)
-#   --reviewer <val>      "milestone-driver" | "internal" | false
-#                         (default "milestone-driver"; omitted when equal to the
-#                          bundled default — the omit test is against the BUNDLED
-#                          default, not the detected value, so a resolved
-#                          "internal" IS written)
 #   --versioning <val>    "semver" | "none" — the Tier-6 versioning policy as the
 #                         feeder's STRING enum. Three-way UNSET-sentinel (NOT the
-#                         omit-when-equals-default rule the two keys above use,
+#                         omit-when-equals-default rule `--project-docs` uses,
 #                         because feeder#versioning has NO bundled default):
 #                         "semver" => emit "versioning":"semver"; "none" => emit
 #                         "versioning":"none"; UNSET/not-passed => OMIT the key
 #                         entirely (never a placeholder — absent = infer-or-ask).
 #                         Any other value is bad input (exit 1).
-#   Env fallbacks (args win): FEEDER_PROJECT_DOCS, FEEDER_REVIEWER,
-#                             FEEDER_VERSIONING, FEEDER_REPO.
+#   Env fallbacks (args win): FEEDER_PROJECT_DOCS, FEEDER_VERSIONING, FEEDER_REPO.
 #
 # Behavior:
 #   - Writes the file ONLY when the assembled config DIVERGES from the bundled
@@ -81,28 +75,63 @@
 #   - Errors (unwritable path, jq failure) surface a clear message on stderr and
 #     exit non-zero — never leaving a partially-written / invalid file in place.
 #
-# Run it:  ./scripts/write-feeder-config.sh --repo /path/to/target [--project-docs ...] [--reviewer ...] [--versioning ...]
+# Run it:  ./scripts/write-feeder-config.sh --repo /path/to/target [--project-docs ...] [--versioning ...]
 # Exit 0 = feeder.json is present-and-correct OR deliberately left absent (all keys at default).
 # Exit 1 = bad input. Exit 2 = write/serialize failure.
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq opens stdout in TEXT mode, so every `\n` it writes becomes
+# `\r\n` and any jq value the shell consumes as TEXT carries a stray `\r`. Cause,
+# mechanism, and the `s/\r$//` rationale are documented once in the canonical
+# block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Exactly ONE stream here needs it: NEW_CONTENT, the serialized feeder.json. It is
+# never re-parsed as JSON in-script — it is consumed as TEXT, and whenever the
+# assembled object is MULTI-line the usual msys accident does not save it:
+# `$(...)` strips only the TRAILING newline, so every interior CR survives. That
+# case is LIVE, not latent (measured on jq-1.8.1: 3 CR bytes in the emitted
+# feeder.json). It costs:
+#   - the write itself. `printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE"` persists CRLF
+#     into feeder.json, breaking the byte-identical-with-the-.ps1-twin contract
+#     these writers maintain (the twin uses ConvertTo-Json and emits LF).
+#   - the idempotency compare `[ "$(cat "$CONFIG_FILE")" = "$NEW_CONTENT" ]`
+#     whenever the on-disk file is LF — one written by the .ps1 twin, by a POSIX
+#     run, or checked out by git. `cat` yields LF, the CRLF NEW_CONTENT never
+#     matches, and the script rewrites an already-correct file as CRLF.
+#   - the trailing `echo "$NEW_CONTENT"` display.
+# LATENT, and folded by the same seam: the empty-object guard
+# `[ "$NEW_CONTENT" = "{}" ]` (issue #77). `{}` is SINGLE-line, and on the msys
+# toolchain this script was developed against `$(...)` strips a trailing CRLF
+# WHOLE, so the guard fires correctly today (measured). That is a TOOLCHAIN
+# behavior, not a guarantee. If a CR ever did survive, an all-default run would
+# WRITE `{}` instead of leaving the file absent — defeating milestone-feeder's
+# absent-only first-run `setup` trigger, the exact regression #77 exists to
+# prevent, and doing it silently: exit 0, success message, wrong outcome.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe.
+#
+# EXEMPT — do NOT "fix" the `command -v jq` presence check below.
+#
+# `set -o pipefail` is in force above, so making the NEW_CONTENT capture a
+# PIPELINE does not swallow a jq failure: jq's non-zero status still propagates
+# to the `if !` error branch. Same shape as write-project-docs.sh:211.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Bundled defaults (mirror milestone-feeder/docs/profile-schema.md) ---------
 readonly DEFAULT_PROJECT_DOCS=".project/"
-readonly DEFAULT_REVIEWER="milestone-driver"
 
 # --- Inputs (args override env; env overrides default) -------------------------
 REPO="${FEEDER_REPO:-.}"
 PROJECT_DOCS="${FEEDER_PROJECT_DOCS:-$DEFAULT_PROJECT_DOCS}"
-REVIEWER="${FEEDER_REVIEWER:-$DEFAULT_REVIEWER}"
 VERSIONING="${FEEDER_VERSIONING:-}"
 
 # UNSET sentinel so an unpassed --versioning is OMITTED (three-way) — distinct from
 # a passed value — because feeder#versioning has NO bundled default (absent =
 # infer-or-ask). Mirrors the UNSET-sentinel pattern write-driver-config.sh:146-156
 # uses for its own optional keys. versioning is the ONLY feeder own-key with no
-# default, so it is the only key here that needs the sentinel (projectDocs/reviewer
-# use omit-when-equals-bundled-default instead).
+# default, so it is the only key here that needs the sentinel (projectDocs uses
+# omit-when-equals-bundled-default instead).
 UNSET=$'\x00UNSET\x00'
 [ -n "${FEEDER_VERSIONING+x}" ] || VERSIONING="$UNSET"
 
@@ -110,7 +139,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo)          REPO="${2:?--repo needs a value}"; shift 2 ;;
     --project-docs)  PROJECT_DOCS="${2:?--project-docs needs a value}"; shift 2 ;;
-    --reviewer)      REVIEWER="${2:?--reviewer needs a value}"; shift 2 ;;
     --versioning)    VERSIONING="${2:?--versioning needs a value}"; shift 2 ;;
     -h|--help)
       grep -E '^# ' "$0" | sed -E 's/^# ?//'
@@ -121,18 +149,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# --- Validate reviewer against the schema's enum -------------------------------
-case "$REVIEWER" in
-  "milestone-driver"|"internal"|false) ;;
-  *)
-    echo "ERROR: --reviewer must be \"milestone-driver\", \"internal\", or false (got: ${REVIEWER})." >&2
-    exit 1 ;;
-esac
-
 # --- Validate versioning against the feeder schema's enum (UNSET => omit) -------
 # Only "semver"|"none" are valid (profile-schema.md:52); any other PASSED value is
 # bad input. UNSET (not passed) is valid and means OMIT (absent = infer-or-ask).
-# Mirrors the --reviewer enum block above and write-driver-config.sh:221-229.
+# Mirrors write-driver-config.sh:221-229.
 if [ "$VERSIONING" != "$UNSET" ]; then
   case "$VERSIONING" in
     "semver"|"none") ;;
@@ -154,15 +174,6 @@ if [ "$PROJECT_DOCS" != "$DEFAULT_PROJECT_DOCS" ]; then
   filter="${filter} | .projectDocs = \$projectDocs"
   args+=(--arg projectDocs "$PROJECT_DOCS")
 fi
-if [ "$REVIEWER" != "$DEFAULT_REVIEWER" ]; then
-  if [ "$REVIEWER" = "false" ]; then
-    # reviewer is the only key whose non-default value can be a JSON boolean.
-    filter="${filter} | .reviewer = false"
-  else
-    filter="${filter} | .reviewer = \$reviewer"
-    args+=(--arg reviewer "$REVIEWER")
-  fi
-fi
 if [ "$VERSIONING" != "$UNSET" ]; then
   # feeder#versioning is a three-way UNSET-sentinel key (no bundled default): emit
   # the resolved string enum, or OMIT when unset. Adding it makes the assembled
@@ -173,7 +184,7 @@ if [ "$VERSIONING" != "$UNSET" ]; then
   args+=(--arg versioning "$VERSIONING")
 fi
 
-if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1)"; then
+if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1 | strip_cr)"; then
   echo "ERROR: failed to serialize feeder.json: ${NEW_CONTENT}" >&2
   exit 2
 fi

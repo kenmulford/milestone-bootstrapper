@@ -84,6 +84,42 @@ set -euo pipefail
 readonly FLAG='🔴'          # suite output-style human-attention marker
 readonly TBD_TOKEN='[TBD]'
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq (e.g. jq-1.8.1) opens stdout in TEXT mode, so every `\n`
+# byte it writes is translated to `\r\n`. Any jq value the shell then consumes as
+# TEXT therefore carries a stray `\r`, and the damage is not uniform:
+#   - `read` from a process substitution keeps the CR, so a CR'd anchor name
+#     matches no `## ` heading — loudly in the pre-flight (exit 3), and SILENTLY
+#     in the placement loop, where the lookups fall through to their `//`
+#     defaults, no anchor block is ever entered, and the run reports "already up
+#     to date" while leaving the template UNPOPULATED. The silent one is worse:
+#     it passes any exit-code-only check.
+#   - a multi-line `$(...)` capture keeps every CR except the trailing one, so a
+#     multi-entry error report renders mangled.
+#   - a CR'd `state` fails the awk `state == "tbd"` test and falls through to the
+#     captured/none branch, OVERWRITING a [TBD] placeholder the recording
+#     discipline above requires be KEPT and flagged — a silent state collapse
+#     that still exits 0.
+# So every jq stream this script consumes as TEXT goes through this one seam —
+# all five: the map validation, the pre-flight anchor list, the placement loop's
+# anchor list, and the per-anchor `state` and `content` lookups. `s/\r$//` strips
+# a CR only where it precedes the LF sed splits on — i.e. exactly the `\r\n`
+# pairs — so it mirrors the template's own CRLF fold at TEMPLATE_CONTENT below
+# and leaves `content`'s deliberately-unterminated final line unterminated. On a
+# POSIX jq (LF stdout) it is a no-op, so applying it unconditionally is safe.
+#
+# EXEMPT: jq output re-parsed as JSON rather than read as text (the single-anchor
+# `jq -n` assembly and the `jq -e '.'` map read). CR is legal JSON whitespace
+# (RFC 8259 §2), so those need no fold.
+#
+# Why `state`/`content` LOOKED safe unfolded: on the msys toolchain this script
+# was developed against, `$(...)` strips a trailing CRLF whole (so a single-line
+# `state` came back clean) and gawk's `getline` strips a trailing CR (so a CRLF
+# `content` temp file read back clean). Both are TOOLCHAIN behaviors, not
+# guarantees — WSL bash invoking a Windows `jq.exe`, or mawk/busybox awk, need
+# not do either. The seam no longer depends on them.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Inputs (args override env) -----------------------------------------------
 TEMPLATE="${PROJECT_DOCS_TEMPLATE:-}"
 MAP_FILE="${PROJECT_DOCS_MAP:-}"
@@ -101,7 +137,11 @@ while [ "$#" -gt 0 ]; do
     --content)  SINGLE_CONTENT="${2:?--content needs a value}"; HAVE_SINGLE=1; shift 2 ;;
     --repo)     shift 2 ;;   # accepted for suite-flag parity; unused
     -h|--help)
-      grep -E '^# ' "$0" | sed -E 's/^# ?//'
+      # Bounded to the LEADING header block (line 2 .. `set -euo pipefail`), which
+      # is exactly the intended usage documentation. An unbounded `grep -E '^# '`
+      # over the whole file scrapes every column-0 comment, so each `--- ... ---`
+      # banner and implementation-note block would leak into user-facing help.
+      sed -n '2,/^set -euo/p' "$0" | grep -E '^# ' | sed -E 's/^# ?//'
       exit 0 ;;
     *)
       echo "ERROR: unknown argument: $1" >&2
@@ -168,7 +208,7 @@ if ! VALIDATION="$(printf '%s' "$MAP_JSON" | jq -r '
              | ($s == "captured" or $s == "none" or $s == "tbd") | not
           then "BADSTATE\t\($k)\t\(.value.state)"
         else empty end
-    ' 2>&1)"; then
+    ' 2>&1 | strip_cr)"; then
   echo "ERROR: failed to validate map: ${VALIDATION}" >&2
   exit 1
 fi
@@ -205,7 +245,7 @@ while IFS= read -r want; do
   if ! printf '%s\n' "$TEMPLATE_ANCHORS" | grep -qxF "$want"; then
     MISSING="${MISSING}${want}"$'\n'
   fi
-done < <(printf '%s' "$MAP_JSON" | jq -r 'keys_unsorted[]')
+done < <(printf '%s' "$MAP_JSON" | jq -r 'keys_unsorted[]' | strip_cr)
 
 if [ -n "$MISSING" ]; then
   echo "ERROR: unmatched anchor(s) — not a '## ' heading in ${TEMPLATE}:" >&2
@@ -245,9 +285,9 @@ trap 'rm -f "$CONTENT_FILE"' EXIT
 
 while IFS= read -r anchor; do
   [ -z "$anchor" ] && continue
-  state="$(printf '%s' "$MAP_JSON" | jq -r --arg a "$anchor" '.[$a].state // "captured"')"
+  state="$(printf '%s' "$MAP_JSON" | jq -r --arg a "$anchor" '.[$a].state // "captured"' | strip_cr)"
   # Write this anchor's content to the temp file (empty for tbd; unused there).
-  printf '%s' "$MAP_JSON" | jq -j --arg a "$anchor" '.[$a].content // ""' > "$CONTENT_FILE"
+  printf '%s' "$MAP_JSON" | jq -j --arg a "$anchor" '.[$a].content // ""' | strip_cr > "$CONTENT_FILE"
 
   WORKING="$(
     printf '%s\n' "$WORKING" | LC_ALL=C awk \
@@ -297,7 +337,7 @@ while IFS= read -r anchor; do
       }
     '
   )" || { echo "ERROR: placement pass failed for anchor '${anchor}' in ${TEMPLATE}." >&2; exit 2; }
-done < <(printf '%s' "$MAP_JSON" | jq -r 'keys_unsorted[]')
+done < <(printf '%s' "$MAP_JSON" | jq -r 'keys_unsorted[]' | strip_cr)
 
 rm -f "$CONTENT_FILE"
 trap - EXIT

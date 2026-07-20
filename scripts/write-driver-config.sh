@@ -62,6 +62,18 @@
 #   to schema parity — that would re-introduce the drift this exemption prevents.
 #   Resolves #66 (schema convergence — decided: permanent exemption, not converge).
 #
+#   GUARDRAIL EXEMPTION — integrationProtection (PERMANENT, by design):
+#   `integrationProtection` is an INTENTIONALLY-emitted additive key that is
+#   PERMANENTLY exempt from the sibling driver schema (milestone-driver/docs/
+#   profile-schema.md) — NOT a temporary ship-ahead. The milestone-driver plugin
+#   never consumes this key; only THIS bootstrapper's provision-protection reads it
+#   back, as the opt-in gate for the integration-branch floor. A schema documents
+#   what its plugin consumes, so this bootstrapper-owned key is canonically
+#   documented in this repo's SPEC §6.1 and deliberately kept OUT of the driver's
+#   schema. The guardrail still governs EVERY OTHER key against schema parity; do
+#   NOT "un-widen" this key back to schema parity — that would re-introduce the
+#   drift this exemption prevents. (Issue #93 decision a.)
+#
 # Inputs (RESOLVED values from the approved plan — this writer does NOT
 # re-detect them; detection happened in `plan`):
 #   --repo <dir>              target repo root (default: current directory)
@@ -94,11 +106,17 @@
 #     --stack-version-file <str> the detected version-file path (e.g. ".nvmrc",
 #                                 ".python-version", "global.json"). OMITTED when not
 #                                 passed — never written as null/empty.
+#     --integration-protection <enum>  whether the integration branch carries a
+#                                 protection floor, one of none|floor.
+#                                 absent-means-default: `none` (or omitted) => OMIT
+#                                 the key; `floor` => write it. An unknown value is a
+#                                 bad input (exit 1). Read back ONLY by this repo's
+#                                 provision-protection --floor integration.
 #   Env fallbacks (args win): DRIVER_REPO, DRIVER_INTEGRATION_BRANCH,
 #     DRIVER_PROTECTED_BRANCH, DRIVER_SOURCE_GLOBS, DRIVER_PROJECT_DOCS,
 #     DRIVER_DOMAIN_SKILLS, DRIVER_NON_NEGOTIABLES, DRIVER_UI_SURFACE_GLOBS,
 #     DRIVER_UNIT_TEST_CMD, DRIVER_PREFLIGHT_CMD, DRIVER_E2E_ENV, DRIVER_VERSIONING,
-#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE.
+#     DRIVER_STACK, DRIVER_STACK_VERSION_FILE, DRIVER_INTEGRATION_PROTECTION.
 #
 # Behavior:
 #   - The minimal valid output is the three Core keys alone (schema:134-142).
@@ -123,6 +141,39 @@
 
 set -euo pipefail
 
+# --- jq output normalization (Windows text-mode stdout) ------------------------
+# A native-Windows jq opens stdout in TEXT mode, so every `\n` it writes becomes
+# `\r\n` and any jq value the shell consumes as TEXT carries a stray `\r`. Cause,
+# mechanism, and the `s/\r$//` rationale are documented once in the canonical
+# block at scripts/write-project-docs.sh:87-121 — not restated here.
+# Exactly ONE stream here needs it: NEW_CONTENT, the serialized driver.json. It is
+# never re-parsed as JSON in-script — it is consumed as TEXT, and because it is a
+# MULTI-line value the usual msys accident does not save it: `$(...)` strips only
+# the TRAILING newline, so every interior CR survives. This is LIVE, not latent
+# (measured on jq-1.8.1: 8 CR bytes in the emitted driver.json). It costs:
+#   - the write itself. `printf '%s\n' "$NEW_CONTENT" > "$TMP_FILE"` persists CRLF
+#     into driver.json — the config every other script in this suite reads back,
+#     and a break of the byte-identical-with-the-.ps1-twin contract these writers
+#     maintain (the twin uses ConvertTo-Json and emits LF).
+#   - the idempotency compare `[ "$(cat "$CONFIG_FILE")" = "$NEW_CONTENT" ]`
+#     whenever the on-disk file is LF — i.e. one written by the .ps1 twin, by a
+#     POSIX run, or checked out by git. `cat` yields LF, the CRLF NEW_CONTENT
+#     never matches, and the no-op check fails: the script rewrites a file that
+#     was already correct and flips it to CRLF. (A CRLF file this script wrote
+#     itself still matches — both sides mangled alike — so the breakage shows up
+#     only across toolchains, which is exactly where it is hardest to diagnose.)
+#   - the trailing `echo "$NEW_CONTENT"` display.
+# On a POSIX jq (LF stdout) the seam is a no-op, so applying it unconditionally
+# is safe.
+#
+# EXEMPT — do NOT "fix" these: the `jq -e 'type == …'` input validators below
+# (exit code only, no text consumed) and the `command -v jq` presence check.
+#
+# `set -o pipefail` is in force above, so making the NEW_CONTENT capture a
+# PIPELINE does not swallow a jq failure: jq's non-zero status still propagates
+# to the `if !` error branch. Same shape as write-project-docs.sh:211.
+strip_cr() { sed $'s/\r$//'; }
+
 # --- Bundled default (mirror milestone-feeder/docs/profile-schema.md; the shared
 # projectDocs pointer's default — see write-feeder-config.sh:58) -----------------
 readonly DEFAULT_PROJECT_DOCS=".project/"
@@ -146,6 +197,9 @@ VERSIONING="${DRIVER_VERSIONING:-}"
 # stack resolves to empty when unset (omit-when-`none`; empty is treated as `none`).
 STACK="${DRIVER_STACK:-}"
 STACK_VERSION_FILE="${DRIVER_STACK_VERSION_FILE:-}"
+# integrationProtection resolves to empty when unset (omit-when-`none`; empty is
+# treated as `none`) — same shape as STACK above.
+INTEGRATION_PROTECTION="${DRIVER_INTEGRATION_PROTECTION:-}"
 
 # Sentinels so an explicitly-passed empty string is distinguishable from "unset".
 # Optional string keys use this to tell "--unit-test-cmd ''" (invalid) apart from
@@ -176,6 +230,7 @@ while [ "$#" -gt 0 ]; do
     --versioning)         VERSIONING="${2:?--versioning needs a value}"; shift 2 ;;
     --stack)              STACK="${2:?--stack needs a value}"; shift 2 ;;
     --stack-version-file) STACK_VERSION_FILE="${2?--stack-version-file needs a value}"; shift 2 ;;
+    --integration-protection) INTEGRATION_PROTECTION="${2:?--integration-protection needs a value}"; shift 2 ;;
     -h|--help)
       grep -E '^# ' "$0" | sed -E 's/^# ?//'
       exit 0 ;;
@@ -254,6 +309,22 @@ if [ -n "$STACK" ]; then
   esac
 fi
 
+# --- Validate integrationProtection (omit-when-default; `none`/empty => OMIT) ---
+# The enum is none|floor, default `none` (SPEC §6.1). `none` (and an unset/empty
+# value) means "omit the key", so it is VALID input; `floor` is the only value ever
+# written. Any other value is rejected with a clear message naming the allowed set
+# + exit 1 (mirrors the --stack reject-unknown shape above).
+WRITE_INTEGRATION_PROTECTION=0
+if [ -n "$INTEGRATION_PROTECTION" ]; then
+  case "$INTEGRATION_PROTECTION" in
+    floor) WRITE_INTEGRATION_PROTECTION=1 ;;
+    none)  WRITE_INTEGRATION_PROTECTION=0 ;;  # default => omit
+    *)
+      echo "ERROR: --integration-protection must be one of none|floor (got: $INTEGRATION_PROTECTION)." >&2
+      exit 1 ;;
+  esac
+fi
+
 # --- Assemble the object in canonical key order (Core first, then optional) -----
 # Build the jq filter incrementally, adding only keys the plan supplied. Core
 # keys are always present. implementerAgent is intentionally never added.
@@ -320,8 +391,17 @@ if [ "$STACK_VERSION_FILE" != "$UNSET" ]; then
   filter="${filter} | .stackVersionFile = \$stackVersionFile"
   args+=(--arg stackVersionFile "$STACK_VERSION_FILE")
 fi
+# integrationProtection: a bootstrapper-owned additive key permanently exempt from
+# the driver schema (see GUARDRAIL EXEMPTION above). Written only for `floor` — a
+# key at its default (`none`) is not written (SPEC.md:271-273), same discipline as
+# the `versioning` boolean. LAST slot, adjacent to the other bootstrapper-owned
+# keys. Same slot in the .ps1 twin so output stays byte-identical.
+if [ "$WRITE_INTEGRATION_PROTECTION" -eq 1 ]; then
+  filter="${filter} | .integrationProtection = \$integrationProtection"
+  args+=(--arg integrationProtection "$INTEGRATION_PROTECTION")
+fi
 
-if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1)"; then
+if ! NEW_CONTENT="$(jq -n "${args[@]}" "{} | ${filter}" 2>&1 | strip_cr)"; then
   echo "ERROR: failed to serialize driver.json: ${NEW_CONTENT}" >&2
   exit 2
 fi

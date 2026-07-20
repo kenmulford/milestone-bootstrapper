@@ -41,6 +41,7 @@ one into the other (`SPEC.md` §4.3).
 | feeder.json#versioning        | captured | add   | `"semver"` \| `"none"`   # Tier-6 routing → the feeder's string-enum read-contract key
 | driver.json#sourceGlobs       | captured | patch | <root-absolute globs>   # baked from appRoots; ["."] no-op → e.g. ["skills/**"]; nested → ["siteroot/web/**","siteroot/api/**"]
 | feeder.json#projectDocs       | captured | add   | <path>              # only when non-default
+| driver.json#integrationProtection | captured | add | `"floor"`   # recorded ONLY when the answer was `floor`; a `none` answer omits the key (the integration branch stays unprotected)
 
 ### Version-file / bump target
 | Target | State | Reconcile | Value |
@@ -60,6 +61,7 @@ one into the other (`SPEC.md` §4.3).
 | branch: <integration>            | captured  | add   | integration branch |
 | branch: <protected>              | captured  | no-op | already the protected branch |
 | protection: <protected>          | captured  | patch | PR required; CI check required; no direct push   # 🔴 blocked-on-precondition when gh failed Step 0
+| protection: <integration>        | captured  | patch | PR required; CI check required; admins may override (integration floor)   # `none` when not opted in — the branch stays unprotected and the driver's PRs merge ungated
 | .github/workflows/ci.yml         | captured  | add   | runs <unitTestCmd> on PRs into <integration>     # 🔴 blocked-on-precondition when gh failed Step 0
 
 ## Write order

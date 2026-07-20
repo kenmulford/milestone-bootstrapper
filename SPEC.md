@@ -255,6 +255,8 @@ changed), never `human-owned`.
 |---|---|---|
 | `driver.json#integrationBranch` | The integration branch name. | branch model (§6.3) |
 | `driver.json#protectedBranch` | The protected branch name. | branch model (§6.3) |
+| `driver.json#integrationProtection` | Whether the **integration** branch carries a protection floor — the enum `"none"` \| `"floor"`, default `"none"`. `"floor"` opts the integration branch into PR-required + required-status-checks with `enforce_admins` **off** (admins may override, so a transient CI break never deadlocks the branch the driver merges into); absent or `"none"` leaves it unprotected. Enum rather than boolean so a third tier can be added without a schema break. A **bootstrapper-owned** key — `milestone-driver` never reads it; only this repo's `provision-protection --floor integration` does (permanently exempt from the driver schema, like `stack`). | branch protection (§6.3) |
+| `driver.json#projectDocs` | The project-docs location, when non-default — the SAME value written to `feeder.json#projectDocs` below (dual-write, one Job-1 path, two consumers; `milestone-driver/docs/profile-schema.md:122`). | §4.1 target path |
 | `driver.json#sourceGlobs` | The code paths the driver's hooks guard. **Recorded root-absolute** — each glob already carries its app-root prefix (§4.1 `appRoots`), so a nested-app repo emits `siteroot/web/**`, a single-root repo emits `skills/**` (the `"."` prefix is a no-op). | repo layout × `appRoots` (§4.1) |
 | `driver.json#uiSurfaceGlobs` | UI surface paths (UI projects only; else `none`). **Recorded root-absolute** — same app-root prefixing as `sourceGlobs`. | repo layout / stack capture × `appRoots` (§4.1) |
 | `driver.json#unitTestCmd` / `preflightCmd` | Detected test / preflight commands. | stack detection |
@@ -266,7 +268,6 @@ changed), never `human-owned`.
 | `driver.json#stack` | The runtime family the emitter scaffolds setup for — one of `node` \| `python` \| `dotnet` \| `maui` \| `rust` \| `plugin` \| `none`. Omitted when `none` (no scaffold). | stack detection |
 | `driver.json#stackVersionFile` | The detected version-file path (e.g. `.nvmrc`, `.python-version`, `global.json`), when one resolved. | stack detection |
 | `feeder.json#projectDocs` | The project-docs location, when non-default. | §4.1 target path |
-| `feeder.json#reviewer` | The self-check reviewer, when non-default. | suite wiring |
 
 Defaults are **omitted** (a key at its default is not written — the configs stay
 minimal). An entry is recorded only when the captured value diverges from the consumer
@@ -307,7 +308,7 @@ project it is `none`. The three states keep the caveat legible and reviewable.
 |---|---|---|---|
 | **Label taxonomy** | One entry per label to create-if-missing: the driver's (`needs design`, `needs decision`, `blocked`, `needs review`, `judgment call`, `in progress`), the feeder's (`ui`, `logic`, `risk:light`, `risk:heavy`), and the suite's (`md-epic`), owned by the bootstrapper as the label's creator. Identified **by name** (repo-local). | `add` (create-if-missing; never delete) | Idempotent create-if-missing. |
 | **Branch model** | One entry per branch (integration, protected) to create-if-missing; the default-branch policy ([BRIEF.md:49](BRIEF.md)). Identified **by name**. | `add` | Never delete a branch ([BRIEF.md:65](BRIEF.md)). |
-| **Branch protection** | The protected-branch rules: no direct push, PR required, CI status check required, optional review ([BRIEF.md:50](BRIEF.md)). Targeted **by branch name**. | `patch` | Re-asserting protection to match the plan is allowed ([BRIEF.md:65](BRIEF.md)). |
+| **Branch protection** | The rules for **each protected target**: no direct push, PR required, CI status check required, optional review ([BRIEF.md:50](BRIEF.md)). Targeted **by branch name**. One entry per target — the **protected** branch always (release floor, `enforce_admins` on), plus the **integration** branch only when `integrationProtection: "floor"` (§6.1) is recorded (integration floor, `enforce_admins` off so admins may still override). | `patch` | Re-asserting protection to match the plan is allowed ([BRIEF.md:65](BRIEF.md)). The integration floor is create-only or reconcile-UP: it **refuses** (changes nothing, exits non-zero) on a branch already carrying `enforce_admins: true` rather than weaken it. |
 | **CI workflow** | The GitHub Actions workflow (target path under `.github/workflows/`) running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration branch, registered as the required status check ([BRIEF.md:51](BRIEF.md)). | `add` (file absent) / `patch` (drifted) | The protection's required check depends on this workflow's name. |
 
 Every target here is a **repo-local / brief-local identifier** — a label name, a branch
@@ -326,7 +327,9 @@ then the dependent chain:
    capture having been recorded.
 3. **Labels** (§6.3).
 4. **Branch model → branch protection → CI workflow** (§6.3) — in this order:
-   protection's required status check depends on the CI workflow existing.
+   protection's required status check depends on the CI workflow existing. The
+   protection step covers **each protected target** (§6.3) — it iterates the
+   targets within the one step; it is not a further ordering constraint.
 
 `apply` follows this order for a fresh deploy; `update` reconciles per-entry by
 reconcile class (§4.4) rather than re-running the full ordered write.

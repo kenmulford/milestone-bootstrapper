@@ -134,6 +134,8 @@ A few things need to be in place for `apply` and `update` to do their work. Each
 
 There's nothing to configure to start — the first `plan` run writes a small profile, and every setting has a default. The settings live in `.milestone-config/`, the same folder `milestone-driver` and `milestone-feeder` read. What `apply` writes there — your branch model, source paths, UI paths, the stack-specific skills the driver should cite, your versioning policy — is what those three consume, so you set it once and the suite runs on it.
 
+Trying to find or remember a specific setting? [docs/driver-config-keys.md](docs/driver-config-keys.md) and [docs/feeder-config-keys.md](docs/feeder-config-keys.md) list every key `driver.json` / `feeder.json` can carry and what it does — including the keys `milestone-driver` and `milestone-feeder` write themselves, outside this plugin.
+
 ## Status
 
 **v0.7.0 — built.** `plan`, `apply`, `update`, and the read-only `check` drift audit all work, along with the interview, the `.project/` docs, and the suite-readiness steps. The bootstrapper was written up as a brief, planned with `milestone-feeder`, and built by `milestone-driver` — the suite built itself. For the full version history, see [CHANGELOG.md](CHANGELOG.md). Part of a dev-tools suite with `milestone-designer`, `milestone-feeder`, `milestone-driver`, and `milestone-coherence-reviewer`.
@@ -141,6 +143,7 @@ There's nothing to configure to start — the first `plan` run writes a small pr
 ## Docs
 
 - [SPEC.md](SPEC.md): the plan-file format — what `plan` writes and `apply` / `update` read.
+- [docs/driver-config-keys.md](docs/driver-config-keys.md) / [docs/feeder-config-keys.md](docs/feeder-config-keys.md): every `driver.json` / `feeder.json` key, in plain language.
 - [docs/understanding-interview.md](docs/understanding-interview.md): how the interview captures and records each field.
 - [BRIEF.md](BRIEF.md): the brief the suite built this from.
 
