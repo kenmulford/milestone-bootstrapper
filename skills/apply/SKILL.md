@@ -103,7 +103,7 @@ Emit `.github/workflows/ci.yml` from the `driver.json` test/preflight commands. 
 
 #### Step (6) — Branch protection (AFTER CI) — invokes #12
 
-Assert the protected branch's safety floor (no direct push, PR + CI checks required, `enforce_admins`, no force-push/deletions) against the contexts CI just emitted — that file must already exist, which is why this step is last. **Merges UP**: GETs existing protection and keeps the stronger value per field, never reconciling down. **Remote step needing repo-admin**, 🔴 blocked-on-precondition per Step 0. CLI: [`references/branch-protection.md`](references/branch-protection.md).
+**Iterate the protection targets**: the protected branch always; the integration branch only when `driver.json` has `integrationProtection: "floor"` (else skip — the script self-gates too). Assert each target's floor (no direct push, PR + CI checks required, `enforce_admins` per floor, no force-push/deletions) against the contexts CI just emitted — that file must already exist, which is why this step is last. **Merges UP**: GETs existing protection and keeps the stronger value per field, never reconciling down. **Remote step needing repo-admin**, 🔴 blocked-on-precondition per Step 0. Per-target CLI: [`references/branch-protection.md`](references/branch-protection.md).
 
 ### Step 4 — Idempotency + resume model (no apply-side state ledger)
 
