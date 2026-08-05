@@ -27,8 +27,8 @@ The reference implementations to copy when building something similar. Point at 
 
 | For… | Mirror | Notes |
 |---|---|---|
-| [TBD] (e.g. a new list page) | [TBD path (anchor) or path:line] | [TBD] |
-| [TBD] (e.g. a service call) | [TBD path (anchor) or path:line] | [TBD] |
+| [TBD] (e.g. a new list page) | [TBD] (e.g. path (anchor) or path:line) | [TBD] |
+| [TBD] (e.g. a service call) | [TBD] (e.g. path (anchor) or path:line) | [TBD] |
 
 ## Commits & PRs
 Message format and PR expectations.
