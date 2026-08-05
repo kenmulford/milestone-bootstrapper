@@ -54,6 +54,8 @@ Consuming repo, default `.project/` (the feeder's `projectDocs` key points here;
 ### 4.1 Read & cite
 Tools cite a project doc as `.project/<doc>.md#<section>` the way the implementer cites `file:line`. **Section headings are stable citation anchors** — templates ship fixed headings; renaming one breaks citations, so the docs evolve by *appending* sections, not renaming them.
 
+**Citing a source file** takes a different form: `path (anchor)` cites a region of any file, keyed to a literal string that appears in it. The definition lives in `milestone-driver`'s [`skills/citation-format.md`](https://github.com/kenmulford/milestone-driver/blob/main/skills/citation-format.md); it is not restated here. `path:line` and `path:start-end` remain fully valid forms to write, not a legacy tolerance; an anchor is *preferred, not required*, for a region that will outlive the line number it sits on today. **`path (anchor)` does not replace, narrow, or compete with the heading forms**: where a heading exists, the heading form remains the form to write, including this section's own `.project/<doc>.md#<section>` rule.
+
 ### 4.2 Filled vs TBD
 Templates ship `[TBD]` placeholders. A section (or whole doc) still marked `[TBD]` is treated as **not specified** — tools fall back to inferred repo convention and never ground a decision on a placeholder. This makes partial adoption safe: a half-filled set helps where it's filled and is invisible where it isn't.
 
