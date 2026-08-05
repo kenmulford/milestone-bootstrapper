@@ -2,6 +2,33 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.9.0 — citation anchors in the shipped templates
+
+**Theme:** a citation pinned to a line number is invalidated by any edit above that line, silently. milestone-driver v1.19.0 shipped `path (anchor)`, a citation keyed to a literal string instead of a line, and this release teaches that form to every repo the bootstrapper provisions. It updates the three places this plugin describes how to cite source: the vendored conventions template's exemplar slots, the project-docs contract, and the understanding interview's capture hint. The definition itself is not restated here. It ships in milestone-driver, and each change points at it by name.
+
+### ✨ Citation anchors
+
+| Issue | PR | What |
+|---|---|---|
+| #168 Teach the shipped conventions template to ask for the `path (anchor)` citation form | #171 | The vendored `project-docs/templates/conventions.md` asked only for `path:line`. Its header comment and both `Canonical exemplars` cells now offer and prefer `path (anchor)` for a region that will outlive its line number, while keeping `path:line` fully valid. Placeholder detection in both writer twins is a per-line substring match on the literal `[TBD]`, so the edited rows keep that token verbatim; twin parity was verified by running both scripts and diffing their output, not by inspection. |
+| #169 State the source-citation anchor rule in SPEC §4.1 alongside the stable-heading-anchor rule | #173 | `project-docs/SPEC.md` §4.1 recorded only how a tool cites a project doc by heading. It now also states the source-citation rule beside it: `path (anchor)` cites a region of any file, keyed to a literal string. Purely additive, per the recorded sign-off on this one-way door: two lines added, zero removed, the existing paragraph byte-identical. |
+| #170 Align the interview routing row's exemplar shape hint with the updated template | #172 | `docs/understanding-interview.md` told the interview engine to capture Canonical-exemplars rows as `(table, path:line)`. The hint now names both shapes and links the shipped definition. Left cell only: the `##` anchor cell is a citation target and stays byte-identical. |
+| (no issue) Sync the scratch-ignore and align the exemplar placeholder shape | #174 | Two drift corrections found during the run. `.milestone-config/.gitignore` was one line behind milestone-driver v1.19.0's sync block, so the `uisurfaceglobs-notice` marker showed as untracked on every run. The exemplar cell also nested a parenthetical inside the `[TBD ...]` brackets, a shape no sibling template uses; it now uses the bare `[TBD]` plus outside-parenthetical form that cell 1 of the same row already used. |
+
+### Consumer notes (upgrading from v0.8.0)
+
+- **Only newly bootstrapped repos see the new template wording.** A repo whose `.project/conventions.md` already exists is not re-copied from the template: `update`'s doc-reconcile step writes captured interview content under a still-`[TBD]` anchor and never re-copies the vendored placeholder text. An existing install picks up the anchor form through the interview hint on its next `plan`, not through a template overwrite.
+- **`path:line` and `path:start-end` are not deprecated.** milestone-driver's shipped definition calls them "not a legacy tolerance," and every slot that accepted them still does. The anchor form is offered and preferred for a region that will outlive its line number; it is not required anywhere, and nothing already written needs migrating.
+- **`path (anchor)` does not replace the heading forms.** Where a heading exists, `path#Heading` remains the form to write, including the `.project/<doc>.md#<section>` rule SPEC §4.1 already carried.
+- **`project-docs/SPEC.md` is this repo's own contract doc and is never scaffolded into a consumer repo.** Only `templates/` is. The §4.1 addition changes what this plugin promises, not what a bootstrapped repo receives.
+- **No schema changes** to `.milestone-config/driver.json` or `.milestone-config/feeder.json`. No new keys, no changed defaults.
+
+### ⚖️ Post-run audit trail
+
+Judgment-call PRs for this release: none
+
+One acceptance criterion was deliberately not met as written. #168's AC1 specified the template sentence verbatim, ending in "`milestone-driver`'s citation-format skill." Code review found that inaccurate: `skills/citation-format.md` is a flat shared reference file, not an invocable skill, and the shipped file says so itself. The sentence ships as "`milestone-driver`'s `skills/citation-format.md`" instead, with every other word of AC1 byte-identical. Recorded on the issue and in #171.
+
 ## v0.8.0 — cross-platform correctness + an integration-branch protection floor
 
 **Theme:** the first real end-to-end bootstrapper → feeder → driver run on a consumer repo surfaced a set of defects that made the bootstrapped result unusable on day one: a red-by-construction Python CI, a branch-protection floor that deadlocked the branch the driver merges into, and a Windows-only jq bug that silently left `.project/` docs unpopulated. This release fixes all three classes, plus one piece of config hygiene.
