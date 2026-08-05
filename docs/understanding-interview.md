@@ -150,7 +150,7 @@ below appears exactly once.
 | Stack-derived: file/type/function/test/branch naming | `## Naming` |
 | Stack-derived: where things go, the shape of a feature | `## File & folder layout` |
 | Stack-derived: where tests live, naming, fixtures, a good test | `## Test patterns` |
-| Stack-derived: reference implementations to mirror (table, `path:line`) | `## Canonical exemplars (mirror these)` |
+| Stack-derived: reference implementations to mirror (table; `path (anchor)` and `path:line` are both valid shapes, full set in `milestone-driver`'s [`skills/citation-format.md`](https://github.com/kenmulford/milestone-driver/blob/main/skills/citation-format.md)) | `## Canonical exemplars (mirror these)` |
 | Stack-derived: commit message format + PR expectations | `## Commits & PRs` |
 | Versioning policy: SemVer y/n, version-file location, bump cadence | `## Versioning` |
 
