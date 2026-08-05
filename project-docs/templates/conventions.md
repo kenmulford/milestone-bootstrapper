@@ -4,7 +4,9 @@
 Project doc (.project/). Cite as `.project/conventions.md#<section>`. This is the file the
 implementer and coherence-reviewer lean on hardest — "reuse conventions" and
 "does this fit the app?" both resolve here. Prefer pointing at a canonical
-exemplar in the codebase (path:line) over prose. Keep ## headings stable — they
+exemplar in the codebase — `path (anchor)` for a region that will outlive its
+line number, `path:line` otherwise; both are valid citation forms (full set in
+`milestone-driver`'s `skills/citation-format.md`). Keep ## headings stable — they
 are citation anchors.
 -->
 
@@ -25,8 +27,8 @@ The reference implementations to copy when building something similar. Point at 
 
 | For… | Mirror | Notes |
 |---|---|---|
-| [TBD] (e.g. a new list page) | [TBD path:line] | [TBD] |
-| [TBD] (e.g. a service call) | [TBD path:line] | [TBD] |
+| [TBD] (e.g. a new list page) | [TBD] (e.g. path (anchor) or path:line) | [TBD] |
+| [TBD] (e.g. a service call) | [TBD] (e.g. path (anchor) or path:line) | [TBD] |
 
 ## Commits & PRs
 Message format and PR expectations.
