@@ -5,7 +5,7 @@ Project doc (.project/). Cite as `.project/config-catalog.md#<section>`. A norms
 project's configuration & secrets: the analog of `.env.example` / an `appsettings.template.*`.
 It records the *shape* of every config/secret key so downstream tools build config, secrets, and
 CORS correctly the first time. For each entry record: **key name · source bucket · format/shape ·
-environment(s) · required?** NEVER record a secret value. Non-secret config facts a builder needs
+environment(s) · required?**; NEVER record a secret value. Non-secret config facts a builder needs
 verbatim (CORS origin URLs, the sender/from address, the JWT issuer/audience) ARE recorded here as
 norms; secret material (signing keys, passwords, API-key strings) is NEVER recorded. Name the
 bucket it lives in and leave the value out. Fill every [TBD]; a section left [TBD] is treated as
@@ -44,7 +44,7 @@ The **complete** set of allowed CORS origins across every environment: localhost
 | [TBD] (e.g. `Cors:AllowedOrigins`) | [TBD] (e.g. appsettings per env) | [TBD] (e.g. list of origin URLs (`https://www.example.com`, …)) | [TBD] (e.g. all) | [TBD] (e.g. yes) |
 
 ## App config (per-environment)
-Non-secret per-environment application settings (API base URLs (`apiUrl`), feature flags, timeouts, log levels) that differ across environments.
+Non-secret per-environment application settings (API base URLs such as `apiUrl`, feature flags, timeouts, log levels) that differ across environments.
 | Key | Source bucket | Format / shape | Environment(s) | Required? |
 |---|---|---|---|---|
 | [TBD] (e.g. `apiUrl`) | [TBD] (e.g. Cloudflare Pages env var) | [TBD] (e.g. https URL) | [TBD] (e.g. per env) | [TBD] (e.g. yes) |

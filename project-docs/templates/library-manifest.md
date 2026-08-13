@@ -22,7 +22,7 @@ One approved choice per purpose, so a redundant alternative is easy to spot.
 
 ## Adding a dependency (the gate)
 A new dependency is a PAUSE, not an autonomous call. Record what it buys, its license / OSS status, and why nothing approved suffices; a human approves before it's added.
-> [TBD] (where proposals go, e.g. "open an issue labeled `needs decision`").
+> [TBD], where proposals go (e.g. "open an issue labeled `needs decision`").
 
 ## Avoid / banned
 Libraries explicitly not to use, and why.
