@@ -198,7 +198,7 @@ consistency mechanism — get them exactly right.
 
 ### 3.1 Replace the placeholder under a stable heading — never rename the heading
 
-Each `##` heading carries a placeholder beneath it: a `> [TBD] — …` blockquote, a
+Each `##` heading carries a placeholder beneath it: a `> [TBD], e.g. …` blockquote, a
 table row of `[TBD]` cells, or (in `## Required states`) `[TBD]` bullets. Record
 the answer by **replacing the placeholder content under the heading**.
 

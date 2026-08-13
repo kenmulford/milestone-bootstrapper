@@ -2,21 +2,21 @@
 
 <!--
 Project doc (.project/). Cite as `.project/conventions.md#<section>`. This is the file the
-implementer and coherence-reviewer lean on hardest — "reuse conventions" and
+implementer and coherence-reviewer lean on hardest: "reuse conventions" and
 "does this fit the app?" both resolve here. Prefer pointing at a canonical
-exemplar in the codebase — `path (anchor)` for a region that will outlive its
+exemplar in the codebase: `path (anchor)` for a region that will outlive its
 line number, `path:line` otherwise; both are valid citation forms (full set in
-`milestone-driver`'s `skills/citation-format.md`). Keep ## headings stable — they
+`milestone-driver`'s `skills/citation-format.md`). Keep ## headings stable: they
 are citation anchors.
 -->
 
 ## Naming
 Files, types, functions, tests, branches.
-> [TBD] — e.g. "PascalCase types; `*ViewModel` suffix; tests mirror the unit name + `Tests`; branches `issue/<n>-<slug>`."
+> [TBD], e.g. "PascalCase types; `*ViewModel` suffix; tests mirror the unit name + `Tests`; branches `issue/<n>-<slug>`."
 
 ## File & folder layout
 Where things go, and the shape of a feature.
-> [TBD] — e.g. "One feature = a folder under `Features/` with View, ViewModel, and Tests colocated."
+> [TBD], e.g. "One feature = a folder under `Features/` with View, ViewModel, and Tests colocated."
 
 ## Test patterns
 Where tests live, how they're named, fixtures/factories, and what a good test looks like.
@@ -36,4 +36,4 @@ Message format and PR expectations.
 
 ## Versioning
 Does the project follow semantic versioning? If so, **where the version lives** (e.g. `pyproject.toml`, `package.json`, `*.csproj`, a `VERSION` file) and the **bump cadence** (per feature / milestone). When semver is on, `milestone-driver` applies the bump per PR and `milestone-feeder` names milestones as versions so the driver can derive the target.
-> [TBD] — e.g. "SemVer; version in `pyproject.toml`; minor bump per feature milestone."
+> [TBD], e.g. "SemVer; version in `pyproject.toml`; minor bump per feature milestone."

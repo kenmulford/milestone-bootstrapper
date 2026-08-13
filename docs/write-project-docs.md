@@ -90,7 +90,7 @@ one** (append-only, [docs/understanding-interview.md §3.1](understanding-interv
 
 ## The mechanism — replace the placeholder under a stable heading
 
-Each template heading carries a placeholder beneath it: a `> [TBD] — …`
+Each template heading carries a placeholder beneath it: a `> [TBD], e.g. …`
 blockquote, a row (or rows) of `[TBD]` table cells, or `[TBD]` bullets (the
 `## Required states` block). The writer walks the file tracking the current `##`
 heading; within the section of an anchor named in the input, it replaces the
