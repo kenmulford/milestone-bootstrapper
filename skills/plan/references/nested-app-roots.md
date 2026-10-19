@@ -7,7 +7,7 @@ points here for the full nested-root procedure.
 
 `appRoots` is the repo-relative directories the project's apps live under
 (`SPEC.md` §4.1). **Default `["."]`** — the repo root *is* the app root
-(today's single-root behavior, byte-identical). A repo whose apps are
+and the detector runs once. A repo whose apps are
 **nested** while configs + `.project/` stay at the project root (e.g.
 `siteroot/web`, `siteroot/api`) carries those paths instead.
 
@@ -41,7 +41,7 @@ changing the detector:
 
 ```bash
 # bash — read-only stack detection, once per app-root. appRoots default ["."]
-# runs the detector exactly once against the repo root (today's behavior, unchanged).
+# runs the detector exactly once against the repo root.
 for root in "${appRoots[@]}"; do        # e.g. (".") or ("siteroot/web" "siteroot/api")
   ./scripts/detect-stack.sh "$root"     # the detector's [REPO_DIR] positional
 done
@@ -64,8 +64,8 @@ is the deduped union of every root's mapped skills. A `flag = human` from
 **any** root (no signal, ambiguous primary, unresolved framework) carries into
 the plan as a `[TBD]` 🔴 for that root — flagged unknowns are never guessed.
 For the **default `["."]`** the loop runs exactly once against the repo root
-and the union is that single finding set — **byte-identical to today's
-single-detector run**.
+and the union is that single finding set: one detector run against
+the repo root.
 
 ## Step 4 — baking app-roots into the emitted globs
 

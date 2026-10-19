@@ -5,9 +5,9 @@ description: This skill should be used when the user invokes "/milestone-bootstr
 
 # plan — interview + inspect + detect → reviewable provisioning plan file
 
-Read the bootstrapper's profile, check the `gh` precondition, run the understanding interview, detect the stack, inspect the repo (adopt-or-init), compose answers + signals via the doc/config mapping, and write one reviewable **provisioning plan file** — Job 1 (durable understanding), Job 2 (suite-readiness) — in the **exact format `SPEC.md` defines**. It **composes** three already-built components, performing **none of their writes itself**: the **understanding interview** (`docs/understanding-interview.md`, #4), **stack detection** (`scripts/detect-stack.sh`, #3), and the **doc/config mapping** (`docs/write-project-docs.md`, #7).
+Read the bootstrapper's profile, check the `gh` precondition, run the understanding interview, detect the stack, inspect the repo (adopt-or-init), compose answers + signals via the doc/config mapping, and write one reviewable **provisioning plan file** — Job 1 (durable understanding), Job 2 (suite-readiness) — in the **exact format `SPEC.md` defines**. It **composes** three already-built components, performing **none of their writes itself**: the **understanding interview** (`docs/understanding-interview.md`), **stack detection** (`scripts/detect-stack.sh`), and the **doc/config mapping** (`docs/write-project-docs.md`).
 
-**Load-bearing invariant** (full statement in Non-negotiables): `plan` writes the plan file and NOTHING else ([BRIEF.md:22](../../BRIEF.md)) — `apply`/`update` (#13/#14) are the only verbs that execute it; these are consequential, long-lived decisions that deserve a human read first.
+**Load-bearing invariant** (full statement in Non-negotiables): `plan` writes the plan file and NOTHING else ([BRIEF.md:22](../../BRIEF.md)) — `apply`/`update` are the only verbs that execute it; these are consequential, long-lived decisions that deserve a human read first.
 
 The plan-file format is owned by `SPEC.md`. The skill mirrors the sibling feeder `plan` skill's shape ([`milestone-feeder/skills/plan/SKILL.md:1-18`](../../../milestone-feeder/skills/plan/SKILL.md), `:258-262`), transposed to settings + docs (not issues).
 
@@ -25,7 +25,7 @@ Say this to the user before doing any work:
 
 Resolve the **target project-docs path** from `feeder.json#projectDocs` when set, else `.project/` (`SPEC.md` §4.1) — record once so the plan's `Target project-docs path` field and every §A entry agree.
 
-Resolve the **app-roots** the same way (`SPEC.md` §4.1). **Default `["."]`** — the repo root *is* the app root (byte-identical to today). Step 0 seeds only this default; the real roots are discovered and confirmed at Step 2. See `references/nested-app-roots.md` for the nested/multi-root rule.
+Resolve the **app-roots** the same way (`SPEC.md` §4.1). **Default `["."]`** — the repo root *is* the app root and the detector runs once. Step 0 seeds only this default; the real roots are discovered and confirmed at Step 2. See `references/nested-app-roots.md` for the nested/multi-root rule.
 
 **Check the `gh` precondition up front — never let it fail silently** ([BRIEF.md:82](../../BRIEF.md)). Probe `gh auth status` read-only (bash: exit code; PowerShell 7+: `$LASTEXITCODE`):
 
@@ -36,7 +36,7 @@ Resolve the **app-roots** the same way (`SPEC.md` §4.1). **Default `["."]`** �
 
 The precondition only gates *remote-dependent* entries — never the interview, detection, or plan-file write. Branch protection needs repo-admin scope; record on flagged entries.
 
-### Step 1 — Run the understanding interview (#4)
+### Step 1 — Run the understanding interview
 
 Run the interview as `docs/understanding-interview.md` defines it (tier order, recording discipline); this step **invokes** it, tier-by-tier (§1, Tier order + gate questions):
 
@@ -60,16 +60,16 @@ Honor the engine's recording discipline (`docs/understanding-interview.md` §1, 
 
 This step **captures** the understanding; it records nothing. The field → `##` anchor map is owned by `docs/understanding-interview.md` §2 — carry each answer forward for Step 4.
 
-### Step 2 — Resolve the app-roots from the layout, then detect the stack (#3) — once per app-root, then union
+### Step 2 — Resolve the app-roots from the layout, then detect the stack — once per app-root, then union
 
 **First, resolve `appRoots` from the repo layout — before the detector loop consumes it** (otherwise a nested repo never gets per-root detection). Inspect read-only where the app's source signals live (`package.json`/`*.csproj`/`pyproject.toml`/`src/`):
 
-- Repo-root signals → `["."]` (single-root, the default — **byte-identical to today**).
+- Repo-root signals → `["."]` (single-root, the default).
 - Nested signals (`siteroot/web`, `siteroot/api`, etc.) → those paths, **confirmed with the human** before the loop consumes them.
 
 This grounds Step 0's `appRoots` field (`SPEC.md` §4.1) in the actual layout, driving the detect+union below and the baked globs (Step 4); Step 3 re-states it, confirming rather than re-discovering.
 
-**Run the stack detector read-only, once per resolved app-root, and union the findings** — it reports per-root and writes nothing (`scripts/detect-stack.sh` header), accepting a `[REPO_DIR]` positional (`.sh` Usage; `.ps1` `-RepoDir`), orchestrated here, not in the detector. A mixed-stack monorepo carries **both** stacks' conventions/pins/`domainSkills`, deduped (`SPEC.md` §4.1, §5); `flag = human` from any root → `[TBD]` 🔴 for that root. Default `["."]` runs once — **byte-identical to today**. See `references/nested-app-roots.md`.
+**Run the stack detector read-only, once per resolved app-root, and union the findings** — it reports per-root and writes nothing (`scripts/detect-stack.sh` header), accepting a `[REPO_DIR]` positional (`.sh` Usage; `.ps1` `-RepoDir`), orchestrated here, not in the detector. A mixed-stack monorepo carries **both** stacks' conventions/pins/`domainSkills`, deduped (`SPEC.md` §4.1, §5); `flag = human` from any root → `[TBD]` 🔴 for that root. Default `["."]` runs once. See `references/nested-app-roots.md`.
 
 The detector emits TSV — one finding per stack (`stack signal convention manifestPin domainSkills flag versionFile`) — seeding the interview's defaults and the plan's entries. Map `stack` to the `driver.json#stack` enum via `references/stack-detection-mapping.md`; `flag=human` → `[TBD]` 🔴, never guessed.
 
@@ -91,7 +91,7 @@ Map each entry's current-vs-planned state onto the `SPEC.md` §4.4 **reconcile c
 - **fresh repo** (no `<projectDocs>/`, no `.milestone-config/*` keys): every entry is create/populate — §A docs `human-owned` (first `apply` writes onto an empty doc), §B config keys/labels/branches/CI `add`, protection `patch`.
 - **existing repo**: `no-op` (matches), `add` (absent), `patch` (differs), or `human-owned` (human-maintained doc — propose, never overwrite); the human sees only the delta (a fully-synced repo is all-`no-op`, `SPEC.md` §4.4).
 
-### Step 4 — Compose the entries through the doc/config mapping (#7)
+### Step 4 — Compose the entries through the doc/config mapping
 
 Compose Step 1's answers + Step 2's signals into the plan's two job sections, per `docs/write-project-docs.md`'s mapping. `plan` **records** the entries — running the writer is `apply`'s job.
 
@@ -146,7 +146,7 @@ Be concise — report status and outcomes flatly, no wall-of-text. Present the p
 ## Non-negotiables
 
 - **`plan` writes the plan file (local scratch) and NOTHING else.** No project-docs population, no `.milestone-config/*` write, no labels, no branches, no branch protection, no CI, no GitHub state of any kind ([BRIEF.md:22](../../BRIEF.md); `SPEC.md` §1). After a `plan` run, the repo's `.project/`, `driver.json`, `feeder.json`, branches, protection, labels, and CI workflows are byte-for-byte unchanged; the only new artifact is the plan file. The plan **records** the planned changes; `apply` / `update` are the only verbs that execute them.
-- **It composes the other steps; it performs none of their writes.** `plan` runs the interview (#4), the detector (#3, read-only), and the doc/config mapping (#7) into the `SPEC.md` plan-file format — it does not write a doc, set a config key, or run the project-docs writer. The plan-file format is owned by `SPEC.md`, not redefined here.
+- **It composes the other steps; it performs none of their writes.** `plan` runs the interview, the detector (read-only), and the doc/config mapping into the `SPEC.md` plan-file format — it does not write a doc, set a config key, or run the project-docs writer. The plan-file format is owned by `SPEC.md`, not redefined here.
 - **Three distinct states, never collapsed** — `captured` / `none` / `[TBD]` 🔴. "None" / "not yet" is a recorded value (a captured decision, not a gap, not `[TBD]`). A genuine unknown is left `[TBD]` and flagged 🔴 — **never fabricated, never silently defaulted** (`SPEC.md` §4.3; [BRIEF.md:30,66](../../BRIEF.md)).
 - **Adopt-or-init is a read-only diff** — a fresh repo plans full provisioning (all create/populate); an existing repo plans only the delta (`no-op` / `add` / `patch` / `human-owned`). `plan` reads existing state to compute this and still writes nothing.
 - **The `gh` precondition is surfaced, never silent** — on failure `plan` emits a clear message and marks the remote-dependent entries (branch protection, CI registration) 🔴 blocked-on-precondition; it MAY still emit the plan, but MUST NOT claim those steps will succeed ([BRIEF.md:82](../../BRIEF.md)).

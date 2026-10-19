@@ -1,11 +1,11 @@
 ---
 name: check
-description: This skill should be used when the user invokes "/milestone-bootstrapper:check", or asks to "check the project docs for drift", "has the project docs gone stale", "did my project docs go stale", "review .project/ against the live repo", "audit the project docs before I trust them", "is the bootstrap still accurate", "check the driver config for drift", or "has domainSkills drifted". Thin, read-only orchestration layer that invokes the component scripts `scripts/check-project-docs.{sh,ps1}` (introduced by #129) and `scripts/check-driver-config.{sh,ps1}` (introduced by #139) and surfaces any detected drift — between the repo's `.project/` docs and the live stack, and between `.milestone-config/driver.json`'s `domainSkills` and the live stack — as an advisory review prompt — the human decides what to do with it. Read-only: it writes nothing, proposes nothing, and never invokes `update`. No flags. Authors no code; opens no PRs.
+description: This skill should be used when the user invokes "/milestone-bootstrapper:check", or asks to "check the project docs for drift", "has the project docs gone stale", "did my project docs go stale", "review .project/ against the live repo", "audit the project docs before I trust them", "is the bootstrap still accurate", "check the driver config for drift", or "has domainSkills drifted". Thin, read-only orchestration layer that invokes the component scripts `scripts/check-project-docs.{sh,ps1}` and `scripts/check-driver-config.{sh,ps1}` and surfaces any detected drift — between the repo's `.project/` docs and the live stack, and between `.milestone-config/driver.json`'s `domainSkills` and the live stack — as an advisory review prompt — the human decides what to do with it. Read-only: it writes nothing, proposes nothing, and never invokes `update`. No flags. Authors no code; opens no PRs.
 ---
 
 # check — read-only drift audit against `.project/` docs and driver config
 
-Invoke the two component scripts — `scripts/check-project-docs.{sh,ps1}` (#129) and `scripts/check-driver-config.{sh,ps1}` (#139) — and report exactly what each finds. `check-project-docs`'s scope today is exactly one doc+anchor — `.project/library-manifest.md#Runtime & frameworks` (the whole of #129); it does not diff `conventions.md` or any other `.project/` doc. `check-driver-config`'s scope is exactly one field of one file — `.milestone-config/driver.json`'s `domainSkills` array (the whole of #139); it touches nothing else in `driver.json` and nothing in `.project/`. `check`'s scope is therefore exactly the union of what these two scripts check — it never audits more than the two scripts do, and it widens automatically if either script's scope ever widens. This is a fourth verb alongside `plan`/`apply`/`update`, not an extension of `update`: `update` writes and reconciles state, `check` writes nothing and only reports — serving the suite's auditability goal (`.project/design-philosophy.md#What we optimize for`). `check` **composes** the two scripts; it performs none of their diagnostic logic itself (`.project/design-philosophy.md#Layering & boundaries` — "skills orchestrate ordering and reporting only... each step is a thin invocation of the component script that owns its slice — skills never duplicate component logic").
+Invoke the two component scripts — `scripts/check-project-docs.{sh,ps1}` and `scripts/check-driver-config.{sh,ps1}` — and report exactly what each finds. `check-project-docs`'s scope is exactly one doc+anchor — `.project/library-manifest.md#Runtime & frameworks`; it does not diff `conventions.md` or any other `.project/` doc. `check-driver-config`'s scope is exactly one field of one file — `.milestone-config/driver.json`'s `domainSkills` array; it touches nothing else in `driver.json` and nothing in `.project/`. `check`'s scope is therefore exactly the union of what these two scripts check — it never audits more than the two scripts do, and it widens automatically if either script's scope ever widens. This is a fourth verb alongside `plan`/`apply`/`update`, not an extension of `update`: `update` writes and reconciles state, `check` writes nothing and only reports — serving the suite's auditability goal (`.project/design-philosophy.md#What we optimize for`). `check` **composes** the two scripts; it performs none of their diagnostic logic itself (`.project/design-philosophy.md#Layering & boundaries` — "skills orchestrate ordering and reporting only... each step is a thin invocation of the component script that owns its slice — skills never duplicate component logic").
 
 ## Announce first
 
@@ -40,7 +40,7 @@ $haveCfg  = (Test-Path -LiteralPath $cfg)  -and ((Get-ChildItem -LiteralPath $cf
 
 ### Step 1 — Invoke the drift-check scripts (default mode — never `--check`/`-Check`)
 
-#### Step 1a — `check-project-docs` (unchanged)
+#### Step 1a — `check-project-docs`
 
 Run from the repo root, with no flags:
 
@@ -52,7 +52,7 @@ Run from the repo root, with no flags:
 ./scripts/check-project-docs.ps1
 ```
 
-**Never pass `--check`/`-Check`.** That flag turns drift into a nonzero (CI-gating) exit — it is the CI-only path the script's own header reserves for automated gating, not this human-facing verb (issue Design → Scope boundary). Capture stdout, stderr, and the real exit code.
+**Never pass `--check`/`-Check`.** That flag turns drift into a nonzero (CI-gating) exit — it is the CI-only path the script's own header reserves for automated gating, not this human-facing verb. Capture stdout, stderr, and the real exit code.
 
 #### Step 1b — `check-driver-config` (precondition-gated)
 
@@ -81,7 +81,7 @@ Test-Path -LiteralPath ".milestone-config/driver.json" -PathType Leaf
 
 **Never pass `--check`/`-Check`** — same CI-only reservation as `check-project-docs` (Step 1a). Capture stdout, stderr, and the real exit code.
 
-`check-project-docs`'s own invocation (Step 1a) carries no equivalent gate — it is unchanged from the prior milestone's shipped behavior. Neither script's invocation (or gated skip) is affected by the other's outcome — an error, drift, or skip on one never skips or alters the other's independent invocation.
+`check-project-docs`'s own invocation (Step 1a) carries no equivalent gate. Neither script's invocation (or gated skip) is affected by the other's outcome — an error, drift, or skip on one never skips or alters the other's independent invocation.
 
 ### Step 2 — Branch on each script's exit contract, then aggregate
 
@@ -112,9 +112,9 @@ Be concise — report each script's outcome flatly, no wall-of-text. Relay each 
 ## Non-negotiables
 
 - **Strictly read-only — writes nothing, ever.** No `.project/` edit, no `.milestone-config/` edit, no proposal file, no GitHub state of any kind. `check` invokes the two component scripts and reports; every other verb in the suite (`plan`, `apply`, `update`) is the one that writes.
-- **Never invokes `update` and never proposes an automatic fix.** Drift is surfaced as information for the human to act on — `check` does not decide, patch, or reconcile anything on its own (issue AC4; `.project/design-philosophy.md#One-way doors`).
-- **Relay, don't restate.** Each script's own stdout is the message — both scripts' outputs (each attributed by name) reach the user verbatim, never replaced by a fixed canned string (issue AC1; thin-orchestration convention, `.project/design-philosophy.md#Layering & boundaries`). The one exception is the `check-driver-config` precondition-skip advisory (Step 1b), which is a `check`-authored line describing why the script was not invoked — there is no script stdout to relay in that branch because the script never ran.
+- **Never invokes `update` and never proposes an automatic fix.** Drift is surfaced as information for the human to act on — `check` does not decide, patch, or reconcile anything on its own (`.project/design-philosophy.md#One-way doors`).
+- **Relay, don't restate.** Each script's own stdout is the message — both scripts' outputs (each attributed by name) reach the user verbatim, never replaced by a fixed canned string (thin-orchestration convention, `.project/design-philosophy.md#Layering & boundaries`). The one exception is the `check-driver-config` precondition-skip advisory (Step 1b), which is a `check`-authored line describing why the script was not invoked — there is no script stdout to relay in that branch because the script never ran.
 - **Exit code first, then stdout.** Applies independently to each invoked script. Exit `1` is always that script's error/failure path regardless of the drift check's outcome; exit `0` branches on stdout between clean and drift. `check` never passes `--check`/`-Check` to either script, so the CI-only exit `2` never occurs here.
-- **No duplicated diagnostic logic.** All stack-detection and drift-diffing logic lives in `scripts/check-project-docs.{sh,ps1}` (#129) and `scripts/check-driver-config.{sh,ps1}` (#139); `check` is invocation + reporting only for both — it never re-implements either script's presence check, anchor/set comparison, or sentinel-row exclusion. The Step 1b precondition test is a narrow file-existence gate, not diagnostic logic — it decides *whether* to invoke `check-driver-config`, never *what* it would find.
+- **No duplicated diagnostic logic.** All stack-detection and drift-diffing logic lives in `scripts/check-project-docs.{sh,ps1}` and `scripts/check-driver-config.{sh,ps1}`; `check` is invocation + reporting only for both — it never re-implements either script's presence check, anchor/set comparison, or sentinel-row exclusion. The Step 1b precondition test is a narrow file-existence gate, not diagnostic logic — it decides *whether* to invoke `check-driver-config`, never *what* it would find.
 - **No flags.** Matches the sibling verbs' stated convention (`skills/plan/SKILL.md:3`, `skills/update/SKILL.md:225`) — `check` takes no arguments.
 - **Authors no code, opens no PRs, never touches branches.** Reads repo state to ground its report; never edits a source file, creates a branch, or opens a PR.

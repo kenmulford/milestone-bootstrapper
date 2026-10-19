@@ -4,8 +4,8 @@ The deterministic placement step that takes the **already-resolved** project
 understanding and writes it into the seven `.project/` docs — replacing the `[TBD]`
 placeholder under each template's stable `##` anchor. This is the back half of
 **Job 1** (project-docs population, [BRIEF.md:28-41](../BRIEF.md)): the
-understanding-interview engine (#4, [docs/understanding-interview.md](understanding-interview.md))
-and the stack detector (#3, [scripts/detect-stack.sh](../scripts/detect-stack.sh))
+understanding-interview engine ([docs/understanding-interview.md](understanding-interview.md))
+and the stack detector ([scripts/detect-stack.sh](../scripts/detect-stack.sh))
 produce the *content*; this layer puts it in the *right place*.
 
 > [!IMPORTANT]
@@ -13,7 +13,7 @@ produce the *content*; this layer puts it in the *right place*.
 > detect a stack, and does **not** decide which value belongs where. The
 > composition judgment — which captured answer goes under which anchor, and
 > whether a field is `captured` / `none` / a genuine unknown — is done **upstream**
-> by the `plan` / `apply` skills (#9/#13) running #3 + #4. This layer receives a
+> by the `plan` / `apply` skills running the detector and the interview. This layer receives a
 > resolved field → content map and performs the mechanical, idempotent placement.
 > Keep the boundary clean: take the resolved map, replace the placeholder under the
 > named anchor, stop.
@@ -38,15 +38,15 @@ Both have identical flags, exit codes, and placement behavior, and emit
 
 ---
 
-## The compose-from-#3-+-#4 contract
+## The compose contract
 
 The caller (the `plan` / `apply` skill) builds the input map by composing two
 upstream sources, then hands it to this writer per target doc:
 
-1. **#4 interview answers** ([docs/understanding-interview.md §2](understanding-interview.md)) —
+1. **Interview answers** ([docs/understanding-interview.md §2](understanding-interview.md)) —
    the captured understanding, already classified into the three states (§3.2 of
    that doc): a real answer, a deliberate "None", or a genuine unknown.
-2. **#3 stack detection** ([scripts/detect-stack.sh](../scripts/detect-stack.sh)) —
+2. **Stack detection** ([scripts/detect-stack.sh](../scripts/detect-stack.sh)) —
    the detected framework/version pin, the best-practice convention note, and the
    `domainSkills` candidate. Detection *seeds* the defaults the interview
    confirms; the resolved value is what reaches this writer.
@@ -198,6 +198,6 @@ template heading or the input anchor and re-run.
 
 A populated `.project/` doc: real captured understanding under stable anchors,
 deliberate "None" answers recorded as real answers, and only genuine unknowns
-left as flagged `[TBD]` 🔴. The `plan` / `apply` / `update` skills (#9/#13/#14)
+left as flagged `[TBD]` 🔴. The `plan` / `apply` / `update` skills
 own the surface, the plan file, and the orchestration; this writer owns the one
 deterministic placement step they call.

@@ -1,6 +1,6 @@
 # apply — Step 3, step (6): Branch protection — CLI reference
 
-Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (6) — run AFTER CI. Step (6) **iterates protection targets**; it is still one step in the fixed six-step order, not a seventh (issue #93 decision f).
+Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (6) — run AFTER CI. Step (6) **iterates protection targets**; it is still one step in the fixed six-step order, not a seventh.
 
 ## The targets
 
@@ -35,7 +35,7 @@ Run the release target first, then the integration target when it applies. Both 
 ```
 
 - **Double gate — `apply` skips it AND the script self-gates.** `apply` skips the invocation when the key is absent or `"none"`; if it is invoked anyway, the script re-reads `integrationProtection` itself and exits **0** with a "not opted in" line having changed nothing. Neither gate alone can protect a branch the user did not opt into, and neither can be bypassed by the other misfiring.
-- **Why a weaker floor here.** The integration branch is the one `milestone-driver` opens a PR into per issue and auto-merges on green. `enforce_admins: true` there deadlocks it — a transient or broken required check wedges the branch and no admin can override, so not even a baseline PR can land (issue #93). The gate is still real: PR required + required status checks.
+- **Why a weaker floor here.** The integration branch is the one `milestone-driver` opens a PR into per issue and auto-merges on green. `enforce_admins: true` there deadlocks it — a transient or broken required check wedges the branch and no admin can override, so not even a baseline PR can land. The gate is still real: PR required + required status checks.
 - **🔴 REFUSE — exit 1, nothing changed.** If the integration branch **already** carries `enforce_admins: true` (a human previously applied the release floor there), the script refuses: it changes nothing, exits 1, names the deadlock, and prints the exact `gh api -X DELETE repos/<slug>/branches/<integration>/protection/enforce_admins` to clear it. It also names the **non-destructive** way out: set `integrationProtection: "none"` in `driver.json` to leave that protection in place and stop asserting the floor there — so the user who hardened the branch **deliberately** is never left with weakening production protection as the only advertised escape from a permanently-halting run. There is **no** `--force` / `-Force` and no other downgrade path — clearing existing protection is the one destructive act and a human performs it knowingly. `apply` **halts** on this like any other step failure (the halt/name/report path), and the refusal fires **before** the merge, so a `--dry-run` preview surfaces it too.
 
 ## Both targets

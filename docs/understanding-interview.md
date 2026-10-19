@@ -6,8 +6,8 @@ bootstrapper — the understanding layer that every later tool grounds in
 ([BRIEF.md:28-41](../BRIEF.md)).
 
 This document is the **engine**, not a user-facing command and not the
-orchestration. It is invoked *by* the `plan` skill (#9) and reconciled *by* the
-`apply` / `update` skills (#13/#14). They own the surface, the plan file, and the
+orchestration. It is invoked *by* the `plan` skill and reconciled *by* the
+`apply` / `update` skills. They own the surface, the plan file, and the
 writes; this engine owns the interview and the recording discipline that fills
 the doc sections.
 
@@ -16,7 +16,7 @@ the doc sections.
 > `.project/` doc sections — nothing else. It does **not** write
 > `.milestone-config/*` configs, set `domainSkills` / `versioning` keys,
 > provision labels / branches / CI, compose with stack **detection** output
-> (#7), or run any `plan` / `apply` / `update` orchestration (#9/#13/#14). Those
+> (the doc/config mapping), or run any `plan` / `apply` / `update` orchestration. Those
 > tools *consume* this engine's output. Keep the boundary clean: ask, record the
 > answer under the right `##` anchor, stop.
 
@@ -40,7 +40,7 @@ time. For every field:
 | **Skip consequence** | On any skippable field, state the consequence on the same line — what stays `[TBD]` 🔴 and which downstream lens loses grounding. (Non-negotiable: [SKILL.md:236](../../milestone-driver/skills/setup/SKILL.md).) |
 | **Atomicity** | Never write a partial result. Either a tier's fields are resolved (captured / "none" / explicitly skipped to `[TBD]` 🔴) or nothing for that tier is written. (Non-negotiable: [SKILL.md:237](../../milestone-driver/skills/setup/SKILL.md).) |
 
-The detected default is *soft-coupled* to stack detection (#7/#3): when detection
+The detected default is *soft-coupled* to stack detection: when detection
 is available, seed the default from it; when it is not, fall back to an
 illustrative example. Either way the prompt is never blank — that is the
 load-bearing rule, not the source of the default.
@@ -76,7 +76,7 @@ consequence on the same line — and the **same §3.2 three states**. They add n
 
 | Field | Question (ask verbatim) | Records to | Default to show | Skip → |
 |---|---|---|---|---|
-| Integration-branch gate | **"Gate the integration branch with CI checks? (PR + required checks; admins can still override for baselines and transient CI breaks)"** | `driver.json#integrationProtection` — `"floor"` when yes; the key is **omitted** for a recorded "none" | `none` (today's behavior — the integration branch is unprotected) | `none` |
+| Integration-branch gate | **"Gate the integration branch with CI checks? (PR + required checks; admins can still override for baselines and transient CI breaks)"** | `driver.json#integrationProtection` — `"floor"` when yes; the key is **omitted** for a recorded "none" | `none` (the integration branch is unprotected) | `none` |
 
 - **Three states, never collapsed** (§3.2): a **yes** is `captured` → `floor`; a
   deliberate **"no" / "not yet"** is a recorded `none` (**no 🔴**) → the key is
@@ -86,14 +86,14 @@ consequence on the same line — and the **same §3.2 three states**. They add n
   branch stays unprotected and the driver's PRs merge ungated.* Note this field
   skips to a recorded **`none`**, not to `[TBD]` 🔴 — `none` is the documented
   default for this key (`SPEC.md` §6.1), so "not answered" and "answered no" land
-  on the same, safe, today's-behavior outcome. That is the one deliberate
+  on the same safe outcome. That is the one deliberate
   departure from §3.3 for this field, and it is why the consequence must be
   stated: skipping is a real choice here, not a deferral.
 - **Why the gate is deliberately weaker than the protected branch's.** The
   integration branch is the one `milestone-driver` opens a PR into per issue and
   auto-merges on green. A release-grade `enforce_admins: true` there deadlocks
   it — a transient or broken required check wedges the branch and no admin can
-  override, so nothing lands (bootstrapper #93). The floor this answer provisions
+  override, so nothing lands. The floor this answer provisions
   keeps PR + required checks and leaves admins able to override.
 
 ---
@@ -186,7 +186,7 @@ token reads as unspecified (file header comment).
 > from it (e.g. FastAPI → Pydantic models, DI pattern, async I/O, router layout)
 > into the `conventions.md` anchors above and pin the framework + version under
 > `## Runtime & frameworks`. Wiring the driver's `domainSkills` from that capture
-> is a **config write owned by #7**, not this engine — record the understanding
+> is a **config write owned by the doc/config mapping**, not this engine — record the understanding
 > here; the config step consumes it.
 
 ---
@@ -274,5 +274,5 @@ A set of **populated** `.project/` doc sections: real captured understanding
 under stable anchors, deliberate "None" answers recorded as real answers, and
 only genuine unknowns left as flagged `[TBD]` 🔴 ([BRIEF.md:41,66](../BRIEF.md)).
 The engine writes no configs, provisions nothing, and runs no orchestration —
-`plan` / `apply` / `update` (#9/#13/#14) and the config writer (#7) consume this
+`plan` / `apply` / `update` and the doc/config mapping consume this
 output from here.

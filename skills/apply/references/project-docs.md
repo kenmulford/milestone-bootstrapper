@@ -1,6 +1,6 @@
 # apply — Step 3, step (1): Project docs — CLI reference
 
-Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (1) — the lowest-risk write. For each **§A** row, populate its doc by invoking the project-docs writer (`scripts/write-project-docs.sh`, #7). The writer is the per-`##`-anchor placement primitive; `apply` keys the recorded captured understanding by anchor using the **fixed field→doc→anchor map** (`docs/understanding-interview.md` §2; `docs/write-project-docs.md` "Field → doc → anchor routing (FIXED)" — read it, do not re-derive it), builds the per-anchor JSON map, and calls the writer once per target doc:
+Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (1) — the lowest-risk write. For each **§A** row, populate its doc by invoking the project-docs writer (`scripts/write-project-docs.sh`). The writer is the per-`##`-anchor placement primitive; `apply` keys the recorded captured understanding by anchor using the **fixed field→doc→anchor map** (`docs/understanding-interview.md` §2; `docs/write-project-docs.md` "Field → doc → anchor routing (FIXED)" — read it, do not re-derive it), builds the per-anchor JSON map, and calls the writer once per target doc:
 
 ```bash
 # bash — populate one doc from the recorded per-anchor map. <map> is the JSON

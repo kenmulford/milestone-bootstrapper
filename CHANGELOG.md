@@ -2,6 +2,15 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.9.1 — prompt-surface cleanup
+
+- Skills and interview docs name components instead of the issue that built them (`invokes #7`, `(reuses #5 and #8)`, `(#9/#13/#14)`). `docs/write-project-docs.md`'s `## The compose-from-#3-+-#4 contract` heading is now `## The compose contract`. No inbound cites.
+- Build-issue acceptance-criteria cites (`issue AC-3`, `issue Design`) and the cross-repo `milestone-feeder` `create/SKILL.md` line cites are removed. The rules they annotated are unchanged.
+- Behavior stated as a delta from an earlier version (`byte-identical to today`, `(unchanged)`, `no longer accepts`, `written before this fix`) is restated as current behavior.
+- The `check` skill description drops `(introduced by #129)` / `(introduced by #139)`.
+- Line-for-line: no file's line count moves and no `SKILL.md` word count rises. No behavior, schema, or script change.
+- Also ships #178 (#177): the em-dashes in the six `project-docs/templates/` files are recast.
+
 ## v0.9.0 — citation anchors in the shipped templates
 
 **Theme:** a citation pinned to a line number is invalidated by any edit above that line, silently. milestone-driver v1.19.0 shipped `path (anchor)`, a citation keyed to a literal string instead of a line, and this release teaches that form to every repo the bootstrapper provisions. It updates the three places this plugin describes how to cite source: the vendored conventions template's exemplar slots, the project-docs contract, and the understanding interview's capture hint. The definition itself is not restated here. It ships in milestone-driver, and each change points at it by name.
@@ -46,7 +55,8 @@ One acceptance criterion was deliberately not met as written. #168's AC1 specifi
 | #92 emit-ci-workflow (Python): no dependency-install step, and a forced preflight job that fails on greenfield layouts | #157 | The `python` case set up the interpreter but emitted no `pip install`, so the `unit-tests` job ran `pytest` with pytest absent and every PR failed `pytest: command not found`. Adds a dependency-install step to the shared `SETUP_BLOCK`, mirroring the `node` path, and installs `requirements.txt` when present (absent emits a `::warning::`, never an error). Also seeds the Python `preflightCmd` toward a dir-robust `python -m compileall .`. **Correction to the issue's premise:** a dir-specific `compileall` does *not* exit non-zero on a missing directory (verified, CPython 3.13.14 — it exits 0). The real defect is quieter: preflight goes green having compiled nothing. |
 | #85 write-project-docs.sh exits 3 on native Windows Git-Bash | #159 | Native-Windows jq opens stdout in text mode, so every `
 ` it writes becomes `
-` and every shell consumer receives a stray ``. The anchor pre-flight reported all anchors unmatched and exited 3. Worse, the placement loop carried the same CR, so lookups fell through to their defaults and the template was left **unpopulated at exit 0** — a silent no-op that passes any exit-code-only check. Adds one shared `strip_cr()` seam and folds all five text-consuming jq streams through it. |
+` and every shell consumer receives a stray `
+`. The anchor pre-flight reported all anchors unmatched and exited 3. Worse, the placement loop carried the same CR, so lookups fell through to their defaults and the template was left **unpopulated at exit 0** — a silent no-op that passes any exit-code-only check. Adds one shared `strip_cr()` seam and folds all five text-consuming jq streams through it. |
 | #158 Sibling scripts consume jq output as shell text — same CRLF bug class | #161, #162 | The same class across six sibling scripts, in two tiers. **Live:** `check-driver-config.sh` rendered silently-wrong drift output (a CR'd `$skill` fed back to `jq --arg` missed, printing ``detected by app stack ''``), and both config writers broke their own idempotency compare while persisting CRLF into the `driver.json` / `feeder.json` every other script reads back. **Latent:** `provision-branches.sh`, `provision-protection.sh`, and `emit-ci-workflow.sh` (where a CR'd `INTEGRATION_BRANCH` is embedded as the emitted workflow's PR branch filter). |
 | #149 feeder.json#reviewer key retired upstream but still written | #151 | milestone-feeder retired its `reviewer` own-key (confirmed in milestone-feeder 0.11.1: `docs/architecture.md:336-338`, `SPEC.md:230`), but `write-feeder-config.{sh,ps1}` never stopped emitting it. Removes the flag, env fallback, validation, default, and JSON assembly from both twins, plus every doc reference. Adds `docs/driver-config-keys.md` and `docs/feeder-config-keys.md`, plain-language per-file key references linked from the README. |
 

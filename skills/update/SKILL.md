@@ -107,7 +107,7 @@ The refreshed plan file is the **load-bearing build artifact** — `update` read
 
 Before walking 4(1)–4(6), compute the **worklist** — §A/§B entries whose Reconcile class is `add`/`patch` (`human-owned`/`no-op` excluded). Persist each entry's status by `Target` (`SPEC.md` §4.2) to `.milestone-bootstrapper/update-state-<slug>.json` (gitignored, §2.1); a re-run skips `done` entries, resuming from the first not-done one. An unreadable/invalid state file is flagged 🔴, discarded, and recomputed from scratch. Full completion **deletes** the file (ephemeral, `apply`'s no-ledger stance); an empty worklist skips the walk — Step 6's NO-OP line fires. Labels/branches (4(3)/4(4)) derive `done` status by re-checking live state afterward. See `references/entry-resumability.md` for the twins.
 
-#### Step 4 (1) — Project docs (§A) — PROPOSE drift, ADD new sections (reuses #7)
+#### Step 4 (1) — Project docs (§A) — PROPOSE drift, ADD new sections
 
 For each §A row, reconcile against the live `<projectDocs>/<doc>`:
 
@@ -128,11 +128,11 @@ For each §A row, reconcile against the live `<projectDocs>/<doc>`:
 
 Routed by the **fixed field→doc→anchor map** (`docs/understanding-interview.md` §2).
 
-#### Step 4 (2) — Configs (§B) — PATCH drift, ADD new keys, PRESERVE live-only via the UNION write (reuses #5 and #8)
+#### Step 4 (2) — Configs (§B) — PATCH drift, ADD new keys, PRESERVE live-only via the UNION write
 
 The two config writers are **whole-file rewriters, not patchers**, rebuilding the object from `{}` using only the keys passed, with **no `--dry-run`** — `update` computes the live→plan diff itself, shown first. A key not passed back is **dropped**, so `update` invokes each writer with the **UNION of keys** (every live key, plus every plan addition) — dropping nothing. Write through `apply`'s direct-write writers, never `setup`. See `references/config-union-write.md` for the rationale, per-key nuances, and the CLI invocation.
 
-#### Step 4 (3) — Labels (§B) — ADD missing (reuses #6)
+#### Step 4 (3) — Labels (§B) — ADD missing
 
 Reconcile the label taxonomy idempotently — `--force` upsert creates a missing label, corrects drifted color/description, never duplicates (`scripts/provision-labels.sh` header). No flags on either twin:
 
@@ -146,7 +146,7 @@ Reconcile the label taxonomy idempotently — `--force` upsert creates a missing
 
 A `none`-state row is a reported no-op; a label live but absent from the plan is the live-only case (Step 5).
 
-#### Step 4 (4) — Branch model (§B) — ADD missing, never delete (reuses #10)
+#### Step 4 (4) — Branch model (§B) — ADD missing, never delete
 
 Reconcile the integration + protected branches (create-if-missing) and default-branch policy — **never deletes, force-pushes, or resets** (`scripts/provision-branches.sh` header):
 
@@ -158,7 +158,7 @@ Reconcile the integration + protected branches (create-if-missing) and default-b
 ./scripts/provision-branches.ps1 -Repo "<repo>"
 ```
 
-#### Step 4 (5) — CI workflow (BEFORE protection) — ADD/PATCH non-destructively (reuses #11)
+#### Step 4 (5) — CI workflow (before protection) — ADD/PATCH non-destructively
 
 Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into the integration branch. **CI is reconciled strictly before protection** — its job names are the required status-check contexts (`BRIEF.md:90`; `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). Non-destructive: absent → created, byte-identical → no-op, **differs → not clobbered** (exit 3, flagged 🔴):
 
@@ -170,7 +170,7 @@ Re-assert `.github/workflows/ci.yml` running the recorded test/preflight command
 ./scripts/emit-ci-workflow.ps1 -Repo "<repo>"
 ```
 
-#### Step 4 (6) — Branch protection (AFTER CI) — re-assert non-destructively (reuses #12)
+#### Step 4 (6) — Branch protection (after CI) — re-assert non-destructively
 
 Re-assert the protected branch's server-side safety floor — the **only re-assertion `update` performs** (`BRIEF.md:65`): GETs existing protection first, keeps the **stronger** value per field (**merge-UP**), so a stronger-than-floor setting is preserved (`scripts/provision-protection.sh` header):
 
@@ -215,11 +215,11 @@ Be concise — report status flatly, no wall-of-text. Present the precondition s
 - **Reconciles onto an ALREADY-bootstrapped repo — not-bootstrapped → ERROR-AND-STOP.** Verifies prior-`apply` evidence before any write (Step 1); absence is a 🔴 terminal stop to `apply`. `plan` refreshes the file if absent (Step 2); `update` regenerates nothing.
 - **Diff-first; announce-then-write; the plan file is the source of truth.** Every live target's diff is shown before writing — never a silent clobber; a byte-identical target is untouched (`SPEC.md` §1).
 - **Tool-owned PATCH vs human-owned PROPOSE.** `driver.json`/`feeder.json`, labels, protection, CI are PATCHed through `apply`'s writers. Filled `.project/` docs are PROPOSED, never silently rewritten (`project-docs/SPEC.md` §4.3).
-- **Reuses `apply`'s (#13's) provisioning units by reference — no second definition.** Configs via `write-driver-config.*`/`write-feeder-config.*` (#8/#5), docs via `write-project-docs.*` (#7), labels/branches/CI/protection via `provision-labels.*`/`provision-branches.*`/`emit-ci-workflow.*`/`provision-protection.*` (#6/#10/#11/#12). `update` adds only reconcile/diff/propose/flag logic (`SPEC.md` §7).
+- **Reuses `apply`'s provisioning units by reference — no second definition.** Configs via `write-driver-config.*`/`write-feeder-config.*`, docs via `write-project-docs.*`, labels/branches/CI/protection via `provision-labels.*`/`provision-branches.*`/`emit-ci-workflow.*`/`provision-protection.*`. `update` adds only reconcile/diff/propose/flag logic (`SPEC.md` §7).
 - **Cross-platform invocation correctness.** Bash/PowerShell twins are behaviorally equivalent, not byte-identical in CLI (Step 4).
 - **Non-destructive by construction.** Never delete a branch, config key, doc/anchor, or label; never overwrite a human doc; never remove a live-only target — flagged 🔴 instead (Step 5). Re-asserting protection is the one allowed re-assertion (merge-UP).
 - **Idempotent — a fully-synced repo is a TRUE NO-OP.** Nothing drifted/new/differing/live-only → zero writes and a no-op line; a re-run is a no-op by construction (`SPEC.md` §4.4).
 - **Three distinct states, never collapsed** — `captured` reconciles; `none` is a reported no-op; `[TBD]` 🔴 is re-surfaced and left unwritten, never fabricated (`SPEC.md` §4.3).
-- **Cannot collapse an existing `feeder.json` back to `{}`.** The feeder writer never emits `{}` or deletes an existing file (issue #77) — resetting the last non-default key leaves it byte-unchanged, not emptied (`references/config-union-write.md`).
+- **Cannot collapse an existing `feeder.json` back to `{}`.** The feeder writer never emits `{}` or deletes an existing file — resetting the last non-default key leaves it byte-unchanged, not emptied (`references/config-union-write.md`).
 - **The `gh` precondition is surfaced, never silent.** Local reconcile runs regardless; remote reconcile (labels, branches, CI, protection — the last needing repo-admin) is 🔴 blocked-on-precondition when `gh` auth/scope is missing (`BRIEF.md:82`).
 - **No flags. Authors no application code, opens no PRs.** The reconcile verb of the plan/apply/update trio — nothing to argument-parse (`BRIEF.md:64`).
