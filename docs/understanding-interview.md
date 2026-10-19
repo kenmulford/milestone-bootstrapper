@@ -186,7 +186,7 @@ token reads as unspecified (file header comment).
 > from it (e.g. FastAPI → Pydantic models, DI pattern, async I/O, router layout)
 > into the `conventions.md` anchors above and pin the framework + version under
 > `## Runtime & frameworks`. Wiring the driver's `domainSkills` from that capture
-> is a **config write owned by the doc/config mapping**, not this engine — record the understanding
+> is a **config write owned by `write-driver-config`**, not this engine — record the understanding
 > here; the config step consumes it.
 
 ---

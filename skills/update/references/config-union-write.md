@@ -22,12 +22,12 @@ The writers stay idempotent under this discipline: when the assembled union equa
 ## Exact CLI invocation
 
 ```bash
-# bash — feeder.json slice (#5). Pass the UNION: every live key (live value if the
+# bash — feeder.json slice. Pass the UNION: every live key (live value if the
 # plan doesn't change it, plan value if it does) PLUS plan additions — so the
 # whole-file rewrite reproduces every live key and drops none.
 ./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"]
 
-# bash — driver.json slice (#8). Same UNION rule. The three Core keys are always
+# bash — driver.json slice. Same UNION rule. The three Core keys are always
 # written; every OTHER live key is passed back with its live value unless the plan
 # changes it; plan additions are added. An optional NEVER carried live and never
 # added by the plan stays omitted (never written as null).

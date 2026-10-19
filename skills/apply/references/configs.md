@@ -1,16 +1,16 @@
 # apply — Step 3, step (2): Configs — CLI reference
 
-Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (2). Write the two config slices. They are order-independent relative to each other — `feeder.json` and `driver.json` neither depend on the other, so either may run first within step (2) ([BRIEF.md:47](../../../BRIEF.md)). Both writers are non-interactive direct writers (Option A) — **never** the interactive `setup` interviews (`scripts/write-driver-config.sh` header: "deliberately does NOT invoke `milestone-driver:setup` … invoking it from `apply` would re-interview the user mid-run").
+Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (2). Write the two config slices. They are order-independent relative to each other — `feeder.json` and `driver.json` neither depend on the other, so either may run first within step (2) ([BRIEF.md:47](../../../BRIEF.md)). Both writers are non-interactive direct writers — **never** the interactive `setup` interviews (`scripts/write-driver-config.sh` header: "deliberately does NOT invoke `milestone-driver:setup` … invoking it from `apply` would re-interview the user mid-run").
 
 Pass each writer the **resolved values from the §B Configs rows** (the writer re-derives nothing; detection happened in `plan`):
 
 ```bash
-# bash — feeder.json slice (#5): the feeder-owned keys projectDocs / versioning.
+# bash — feeder.json slice: the feeder-owned keys projectDocs / versioning.
 # Omit --project-docs when at the bundled default; omit --versioning when the
 # Tier-6 answer was skipped (versioning has NO default).
 ./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"] [--versioning "<semver|none>"]
 
-# bash — driver.json slice (#8): the three Core keys are REQUIRED; optionals are
+# bash — driver.json slice: the three Core keys are REQUIRED; optionals are
 # omitted when the plan did not record them (never written as null/empty). The
 # branch names recorded in §B (branch model) ARE driver.json#integrationBranch /
 # #protectedBranch — write them here so steps (4)-(6) can read them back.
@@ -34,7 +34,7 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 - **`versioning`** (DUAL-WRITE — one Tier-6 answer, two writers, two distinct keys) → the single recorded versioning answer is passed to both the driver and the feeder writer, mapped per its type:
   - **DRIVER** (`driver.json#versioning`, boolean) → `--versioning false` / `-Versioning false` only when the plan recorded non-versioned; omit otherwise (absent-means-versioned — the driver writer emits only `false`).
   - **FEEDER** (`feeder.json#versioning`, string enum) → `--versioning semver` / `-Versioning semver` when versioned; `--versioning none` when non-versioned; omit when the Tier-6 answer was skipped/[TBD] (the feeder key has no default — absent = infer-or-ask, `milestone-feeder/docs/profile-schema.md:52`; never write a placeholder).
-- `stack` / `stackVersionFile` → pass `--stack` / `-Stack` (the resolved enum) and `--stack-version-file` / `-StackVersionFile` (the version-file PATH) **only when the §B Configs row recorded them**; omit when absent (the writer omits `stack` for `none`/empty and `stackVersionFile` when not passed — `scripts/write-driver-config.sh` stack validation). Same optional-pass-through shape as `--domain-skills` / `--versioning`.
+- `stack` / `stackVersionFile` → pass `--stack` / `-Stack` (the resolved enum) and `--stack-version-file` / `-StackVersionFile` (the version-file path) **only when the §B Configs row recorded them**; omit when absent (the writer omits `stack` for `none`/empty and `stackVersionFile` when not passed — `scripts/write-driver-config.sh` stack validation). Same optional-pass-through shape as `--domain-skills` / `--versioning`.
 - `integrationProtection` → pass `--integration-protection floor` / `-IntegrationProtection floor` **only when the §B Configs row recorded `integrationProtection: "floor"`** (the interview's integration-protection answer); omit otherwise (absent = the `none` default — the integration branch stays unprotected). The writers accept only `none` | `floor`, and `none` is written as an omission, never as the string. This is the one flag step (6) gates on: `provision-protection.* --floor integration` / `-Floor integration` reads `driver.json#integrationProtection` back and self-gates to a reported no-op when the key is absent. So dropping this flag on a run whose interview answered yes is a silent failure — step (6) exits 0 saying "not opted in", and the integration branch is left unprotected while the user believes it is gated (`.project/design-philosophy.md#Error & failure philosophy`). Same optional-pass-through shape as `--stack` / `--domain-skills`.
 - `nonNegotiables` → pass `--non-negotiables` / `-NonNegotiables` (the recorded JSON string[]) **only when the §B Configs row `driver.json#nonNegotiables` recorded it**; omit when absent (the writer omits it when not passed). Same optional-pass-through shape as `--domain-skills`.
 - Both writers are idempotent: a re-run whose assembled object is byte-identical to the existing file leaves it untouched (true no-op; `scripts/write-feeder-config.sh` Behavior). For the feeder slice specifically, an all-default assembled object (`{}`) is **not emitted at all** — the writer leaves `feeder.json` absent rather than writing `{}`, so `milestone-feeder`'s absent-only first-run `setup` fires.
