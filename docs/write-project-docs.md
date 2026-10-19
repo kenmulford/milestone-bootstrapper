@@ -9,10 +9,10 @@ and the stack detector ([scripts/detect-stack.sh](../scripts/detect-stack.sh))
 produce the *content*; this layer puts it in the *right place*.
 
 > [!IMPORTANT]
-> **Scope — placement only.** This layer does **not** interview, does **not**
-> detect a stack, and does **not** decide which value belongs where. The
+> **Scope — placement only.** This layer does not interview, does not
+> detect a stack, and does not decide which value belongs where. The
 > composition judgment — which captured answer goes under which anchor, and
-> whether a field is `captured` / `none` / a genuine unknown — is done **upstream**
+> whether a field is `captured` / `none` / a genuine unknown — is done upstream
 > by the `plan` / `apply` skills running the detector and the interview. This layer receives a
 > resolved field → content map and performs the mechanical, idempotent placement.
 > Keep the boundary clean: take the resolved map, replace the placeholder under the
@@ -58,7 +58,7 @@ re-derives a value, never re-runs the interview, and never re-detects the stack.
 
 ## Field → doc → anchor routing (FIXED)
 
-The routing is **fixed and authoritative** — it is **not** re-specified here.
+The routing is **fixed and authoritative** — it is not re-specified here.
 This writer only places content under the anchor the caller names; the caller
 keys the map by the correct anchor. The single source of truth for the routing is:
 
@@ -185,7 +185,7 @@ Env fallbacks (args win): `PROJECT_DOCS_TEMPLATE`, `PROJECT_DOCS_MAP`.
 | `0` | Doc populated, or already up to date (true no-op). |
 | `1` | Bad input / usage — missing flag, unreadable file, malformed map JSON, invalid state. |
 | `2` | Write / serialize failure — unwritable path, temp-file failure. |
-| `3` | **Unmatched anchor** — an input anchor is not a `##` heading in the template (a renamed/missing heading). A loud failure, never a silent skip; the file is left **unchanged**. |
+| `3` | **Unmatched anchor** — an input anchor is not a `##` heading in the template (a renamed/missing heading). A loud failure, never a silent skip; the file is left unchanged. |
 
 The unmatched-anchor failure is deliberate: a heading the writer cannot find
 means the template drifted from the routing, which would silently break the

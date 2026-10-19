@@ -8,6 +8,7 @@ Notable changes to the **milestone-bootstrapper** plugin, newest first.
 - Build-issue acceptance-criteria cites (`issue AC-3`, `issue Design`) and the cross-repo `milestone-feeder` `create/SKILL.md` line cites are removed. The rules they annotated are unchanged.
 - Behavior stated as a delta from an earlier version (`byte-identical to today`, `(unchanged)`, `no longer accepts`, `written before this fix`) is restated as current behavior.
 - The `check` skill description drops `(introduced by #129)` / `(introduced by #139)`.
+- Emphasis register: at most one bold run per line, on the clause that gates behavior; caps-emphasis words (`NOT`, `MUST`, `NEVER`, `AND`...) are lowercase. Named labels and operations (`READY`, `FLAGGED`, `DRIFT`, `ERROR-AND-STOP`, `PROPOSE`, `PATCH`, `ADD`, `PRESERVE`), headings, and quoted script text are unchanged. Covers `skills/**`, both interview docs, and `.project/conventions.md` / `environment.md`.
 - Line-for-line: no file's line count moves and no `SKILL.md` word count rises. No behavior, schema, or script change.
 - Also ships #178 (#177): the em-dashes in the six `project-docs/templates/` files are recast.
 

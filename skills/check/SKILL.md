@@ -17,7 +17,7 @@ Say this to the user before doing any work:
 
 ### Step 0 — Confirm the repo shows evidence of a prior `apply`
 
-There is nothing to check until a prior `apply` has run. Read-only, for **either** `.project/` **or** `.milestone-config/` (mirrors `update`'s Step 1 bootstrapped-repo check, `skills/update/SKILL.md:43-62`, adapted from its ERROR-AND-STOP to this verb's advisory stance — `check` never hard-stops the session, it just has nothing to invoke the scripts against yet):
+There is nothing to check until a prior `apply` has run. Read-only, for either `.project/` or `.milestone-config/` (mirrors `update`'s Step 1 bootstrapped-repo check, `skills/update/SKILL.md:43-62`, adapted from its `ERROR-AND-STOP` to this verb's advisory stance — `check` never hard-stops the session, it just has nothing to invoke the scripts against yet):
 
 ```bash
 docs=".project"; cfg=".milestone-config"
@@ -56,7 +56,7 @@ Run from the repo root, with no flags:
 
 #### Step 1b — `check-driver-config` (precondition-gated)
 
-Before invoking `check-driver-config`, perform a **new, driver.json-file-specific existence test** — this is **not** a reuse of Step 0's `have_cfg`, which tests only that `.milestone-config/` is non-empty and is satisfied by any file in it, not specifically `driver.json`. Conflating the two would wrongly invoke `check-driver-config` when `.milestone-config/` holds other files (e.g. `feeder.json`, a notice marker) but not yet `driver.json`, reproducing the script's own hard exit-1 error from a bootstrapping-order gap.
+Before invoking `check-driver-config`, perform a **new, driver.json-file-specific existence test** — this is not a reuse of Step 0's `have_cfg`, which tests only that `.milestone-config/` is non-empty and is satisfied by any file in it, not specifically `driver.json`. Conflating the two would wrongly invoke `check-driver-config` when `.milestone-config/` holds other files (e.g. `feeder.json`, a notice marker) but not yet `driver.json`, reproducing the script's own hard exit-1 error from a bootstrapping-order gap.
 
 ```bash
 [ -f ".milestone-config/driver.json" ]
@@ -68,7 +68,7 @@ Test-Path -LiteralPath ".milestone-config/driver.json" -PathType Leaf
 
 | Test result | Action |
 |---|---|
-| **False** (file absent — including the `.project/`-present-but-`.milestone-config/`-absent case) | **Skip the invocation entirely.** Do not run `check-driver-config`. Record the advisory line `check-driver-config: not yet configured — run milestone-driver:setup first.` for Step 2/3. |
+| **False** (file absent — including the `.project/`-present-but-`.milestone-config/`-absent case) | Skip the invocation entirely. Do not run `check-driver-config`. Record the advisory line `check-driver-config: not yet configured — run milestone-driver:setup first.` for Step 2/3. |
 | **True** (file present) | Run from the repo root, with no flags: |
 
 ```bash
@@ -89,13 +89,13 @@ Each invoked script resolves its own three-class exit contract independently —
 
 | Exit code | Meaning | What `check` does |
 |---|---|---|
-| **1** | Usage / read error (bad `--repo`, missing `.project/library-manifest.md`, missing/malformed `driver.json` domainSkills, a `detect-stack` invocation failure, unparseable output) — **always nonzero**, fires in this default invocation too, not only under `--check`. | **Error path for that script.** Relay its stderr message verbatim, attributed to that script by name — no fallback "no drift" report for that script. Never swallow the failure (`.project/design-philosophy.md#Error & failure philosophy` — "flag, don't guess"). This does not stop or alter the other script's own invocation or outcome — see the aggregation rule below. |
-| **0**, stdout carries no `DRIFT — ` line | Clean run for that script — no drift, OR a legitimate non-drift sentinel (e.g. "no application stack detected — nothing to compare", an anchor still `[TBD]` and skipped, or `check-driver-config`'s own "nothing to compare — no non-exempt application stack detected"). | **Happy path for that script.** Relay its stdout **verbatim**, attributed to that script by name — do not substitute a canned string. |
-| **0**, stdout carries one or more `DRIFT — ` lines | Drift found for that script — it names each drifted item plus its summary count and the "informational only" trailer. | **Drift path for that script.** Relay its stdout verbatim, attributed by name, then list the drifted item(s) as an advisory review prompt. State explicitly that the human decides. Do **not** invoke `update`, propose an automatic fix, or rewrite any `.project/` prose or `.milestone-config/driver.json` (mirrors the PROPOSE-not-PATCH posture `skills/update/SKILL.md` uses for human-owned state, Step 4(1) — `check` goes one step further and never writes at all, but reuses the same "show it, human decides" reporting shape). |
+| **1** | Usage / read error (bad `--repo`, missing `.project/library-manifest.md`, missing/malformed `driver.json` domainSkills, a `detect-stack` invocation failure, unparseable output) — always nonzero, fires in this default invocation too, not only under `--check`. | Error path for that script. Relay its stderr message verbatim, attributed to that script by name — no fallback "no drift" report for that script. Never swallow the failure (`.project/design-philosophy.md#Error & failure philosophy` — "flag, don't guess"). This does not stop or alter the other script's own invocation or outcome — see the aggregation rule below. |
+| **0**, stdout carries no `DRIFT — ` line | Clean run for that script — no drift, OR a legitimate non-drift sentinel (e.g. "no application stack detected — nothing to compare", an anchor still `[TBD]` and skipped, or `check-driver-config`'s own "nothing to compare — no non-exempt application stack detected"). | Happy path for that script. Relay its stdout verbatim, attributed to that script by name — do not substitute a canned string. |
+| **0**, stdout carries one or more `DRIFT — ` lines | Drift found for that script — it names each drifted item plus its summary count and the "informational only" trailer. | Drift path for that script. Relay its stdout verbatim, attributed by name, then list the drifted item(s) as an advisory review prompt. State explicitly that the human decides. Do not invoke `update`, propose an automatic fix, or rewrite any `.project/` prose or `.milestone-config/driver.json` (mirrors the PROPOSE-not-PATCH posture `skills/update/SKILL.md` uses for human-owned state, Step 4(1) — `check` goes one step further and never writes at all, but reuses the same "show it, human decides" reporting shape). |
 
 `check-driver-config`'s Step 1b precondition-gate skip is a **fourth, script-specific outcome** — not an exit code — and surfaces as its own attributed advisory line (`check-driver-config: not yet configured — run milestone-driver:setup first.`), distinct from the exit-1 error path above and never triggering it (the invocation that would raise that error never runs).
 
-**Aggregation rule.** Each script's outcome — clean, drift, error, or (for `check-driver-config` only) precondition-skipped-advisory — surfaces as its **own attributed line/row** in the combined report, never merged or summarized together. An error or skip on one script is never swallowed by the other script's clean result, and drift on one never masks or is masked by the other's independent outcome — even when the other script is itself clean.
+Aggregation rule. Each script's outcome — clean, drift, error, or (for `check-driver-config` only) precondition-skipped-advisory — surfaces as its **own attributed line/row** in the combined report, never merged or summarized together. An error or skip on one script is never swallowed by the other script's clean result, and drift on one never masks or is masked by the other's independent outcome — even when the other script is itself clean.
 
 `--check`'s exit `2` never occurs here — Step 1 never passes that flag to either script. Discriminate the happy path from the drift path by the presence of a `DRIFT — ` line in stdout, not by matching any single canned message — this keeps `check` correct even if either script's exact non-drift wording changes, without re-implementing its diff logic.
 

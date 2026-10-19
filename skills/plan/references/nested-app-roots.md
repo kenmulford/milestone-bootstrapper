@@ -22,7 +22,7 @@ iterates the real candidate roots, not the bare default). Record `appRoots`
 once so the plan file's `App-roots` field, the per-root detection (Step 2),
 and the baked globs (Step 4) all agree.
 
-`appRoots` is a **plan-file-only** field: it is **not** written into
+`appRoots` is a plan-file-only field: it is **not** written into
 `driver.json` / `feeder.json` and **not** persisted under `.project/`
 (`SPEC.md` §4.1, §6.1) — it shapes the detection loop and the emitted glob
 *values*, nothing more.
@@ -76,15 +76,15 @@ that root contributes, derive the emitted glob in this **fixed order —
 normalize, then no-op test, then join**:
 
 1. **Normalize `R` first.** Strip any single trailing slash (`siteroot/web/` → `siteroot/web`).
-2. **No-op test on the normalized `R`.** Treat `"."`, `"./"`, and `""` (empty) as the **same no-op sentinel** — after step 1 they all normalize to `"."` or `""`. A no-op sentinel emits `G` **unchanged** (never `./G`, never a leading or doubled separator).
-3. **Join only a real nested root.** Any `R` that is **not** the no-op sentinel (e.g. `siteroot/web`) emits `R/G` — a single `/` separator between the normalized root and the base glob.
+2. **No-op test on the normalized `R`.** Treat `"."`, `"./"`, and `""` (empty) as the same no-op sentinel — after step 1 they all normalize to `"."` or `""`. A no-op sentinel emits `G` unchanged (never `./G`, never a leading or doubled separator).
+3. **Join only a real nested root.** Any `R` that is not the no-op sentinel (e.g. `siteroot/web`) emits `R/G` — a single `/` separator between the normalized root and the base glob.
 
 The persisted glob set is the **union** of every app-root's emitted globs:
 
 | `appRoots` | base glob | emitted (recorded) glob |
 |---|---|---|
-| `["."]` / `["./"]` / `[""]` (default / single-root) | `skills/**` | `skills/**`  ← **no-op sentinel; NEVER `./skills/**` or `//skills/**`** |
-| `["siteroot/web"]` (or `["siteroot/web/"]`) | `src/**` | `siteroot/web/src/**`  ← **single separator** |
+| `["."]` / `["./"]` / `[""]` (default / single-root) | `skills/**` | `skills/**`  ← no-op sentinel; never `./skills/**` or `//skills/**` |
+| `["siteroot/web"]` (or `["siteroot/web/"]`) | `src/**` | `siteroot/web/src/**`  ← single separator |
 | `["siteroot/web", "siteroot/api"]` | `src/**` (web), `**/*.cs` (api) | `siteroot/web/src/**`, `siteroot/api/**/*.cs` (union) |
 
 Because normalization runs **before** the no-op test, every spelling of "the
