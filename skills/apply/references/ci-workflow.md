@@ -4,12 +4,12 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (5) — run before protec
 
 ```bash
 # bash
-./scripts/emit-ci-workflow.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/emit-ci-workflow.sh" --repo "<repo>"
 ```
 
 ```powershell
 # PowerShell 7+ (PascalCase -Flag param).
-./scripts/emit-ci-workflow.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/emit-ci-workflow.ps1" -Repo "<repo>"
 ```
 
 - Consumes `integrationBranch` / `unitTestCmd` / `preflightCmd` from the `driver.json` written at step (2) — re-detects nothing. It emits one named job per gate; the job `name:` values (`unit-tests`, `preflight`) are the required-status-check contexts step (6) registers (`scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). **This is why CI precedes protection** — the contexts must exist before protection requires them.

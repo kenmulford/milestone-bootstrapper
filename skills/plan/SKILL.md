@@ -3,6 +3,8 @@ name: plan
 description: This skill should be used when the user invokes "/milestone-bootstrapper:plan", or asks to "plan the bootstrap", "preview the project setup", or "turn this repo into a reviewable provisioning plan". Interviews the human about the project's understanding (goal, architecture, stack, conventions, environment, versioning), inspects the repo, detects the stack, and writes a single reviewable provisioning plan file describing everything it would record into the project docs and change in the repo's suite-readiness — and writes nothing remote. Read-only on the repo and on GitHub: its entire output is one local scratch plan file. No flags. Authors no code; opens no PRs.
 ---
 
+If `${CLAUDE_PLUGIN_ROOT}` appears unexpanded, it is the parent of the `skills/` directory that holds this file. Codex: [`../runtime-codex.md`](../runtime-codex.md).
+
 # plan — interview + inspect + detect → reviewable provisioning plan file
 
 Read the bootstrapper's profile, check the `gh` precondition, run the understanding interview, detect the stack, inspect the repo (adopt-or-init), compose answers + signals via the doc/config mapping, and write one reviewable provisioning plan file — Job 1 (durable understanding), Job 2 (suite-readiness) — in the exact format `SPEC.md` defines. It composes three already-built components, performing **none of their writes itself**: the understanding interview (`docs/understanding-interview.md`), stack detection (`scripts/detect-stack.sh`), and the doc/config mapping (`docs/write-project-docs.md`).
@@ -141,7 +143,7 @@ The plan file is local scratch — nothing else is written, no GitHub state of a
 
 ## Output style
 
-Be concise — report status and outcomes flatly, no wall-of-text. Present the precondition status, the captures, the adopt-or-init delta, and the change preview as **tables**, not inline prose. Mark anything that needs a human with 🔴 — every flagged `[TBD]` and every blocked-on-precondition entry. A genuine unknown stays `[TBD]` 🔴; it is never fabricated to make the plan look complete. (Mirrors the suite's shared output style — [BRIEF.md:80](../../BRIEF.md); `docs/understanding-interview.md` §4.)
+Report status and outcomes flatly, no wall-of-text. Present the precondition status, the captures, the adopt-or-init delta, and the change preview as **tables**, not inline prose. Mark anything that needs a human with 🔴 — every flagged `[TBD]` and every blocked-on-precondition entry. A genuine unknown stays `[TBD]` 🔴; it is never fabricated to make the plan look complete. (Mirrors the suite's shared output style — [BRIEF.md:80](../../BRIEF.md); `docs/understanding-interview.md` §4.)
 
 ## Non-negotiables
 

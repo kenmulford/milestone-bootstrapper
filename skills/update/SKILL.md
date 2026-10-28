@@ -3,6 +3,8 @@ name: update
 description: This skill should be used when the user invokes "/milestone-bootstrapper:update", or asks to "reconcile my refreshed plan", "my project changed — sync the bootstrap", "we adopted Redis / switched the ORM — update the docs and config", or "re-apply the plan onto the already-bootstrapped repo". Reconciles a refreshed provisioning plan onto an already-bootstrapped repo — diff-first, non-destructive. Re-runs `plan` first if no plan file exists, then diffs the refresh against live `.project/` docs and `.milestone-config/` configs: PATCHes drifted configs (diff first), ADDs what's new, PROPOSES — never overwrites — human-owned doc edits, and FLAGS — never deletes — anything absent from the plan. A fully-synced repo is a true no-op. No flags. Authors no code; opens no PRs.
 ---
 
+If `${CLAUDE_PLUGIN_ROOT}` appears unexpanded, it is the parent of the `skills/` directory that holds this file. Codex: [`../runtime-codex.md`](../runtime-codex.md).
+
 # update — reconcile a refreshed plan onto an already-bootstrapped repo (diff-first, propose human-owned, non-destructive)
 
 Refresh the plan file `plan` wrote for this project (same deterministic slug), then reconcile it onto the live repo, diffing each entry against live state per the PATCH/ADD/PROPOSE/FLAG contract. Where `apply` deploys onto a fresh repo, `update` re-deploys onto one that exists — the **architecture-changed path is first-class** ("we adopted Redis", "switched the ORM"): re-run `plan`, `update` reconciles the delta.
@@ -115,11 +117,11 @@ For each §A row, reconcile against the live `<projectDocs>/<doc>`:
 - **`add`** (anchor absent or still `[TBD]`) → write the captured content:
 
 ```bash
-./scripts/write-project-docs.sh --template "<projectDocs>/<doc>" --anchor "<## anchor>" --state captured --content "<captured text>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-project-docs.sh" --template "<projectDocs>/<doc>" --anchor "<## anchor>" --state captured --content "<captured text>"
 ```
 
 ```powershell
-./scripts/write-project-docs.ps1 -Template "<projectDocs>/<doc>" -Anchor "<## anchor>" -State captured -Content "<captured text>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-project-docs.ps1" -Template "<projectDocs>/<doc>" -Anchor "<## anchor>" -State captured -Content "<captured text>"
 ```
 
 - **`human-owned`** (differs from the refresh) → PROPOSE, do not write. Print the diff, marked 🔴 *proposed — accept to apply.* Write only after acceptance.
@@ -137,11 +139,11 @@ The two config writers are whole-file rewriters, not patchers, rebuilding the ob
 Reconcile the label taxonomy idempotently — `--force` upsert creates a missing label, corrects drifted color/description, never duplicates (`scripts/provision-labels.sh` header). No flags on either twin:
 
 ```bash
-./scripts/provision-labels.sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.sh"
 ```
 
 ```powershell
-./scripts/provision-labels.ps1
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.ps1"
 ```
 
 A `none`-state row is a reported no-op; a label live but absent from the plan is the live-only case (Step 5).
@@ -151,11 +153,11 @@ A `none`-state row is a reported no-op; a label live but absent from the plan is
 Reconcile the integration + protected branches (create-if-missing) and default-branch policy — **never deletes, force-pushes, or resets** (`scripts/provision-branches.sh` header):
 
 ```bash
-./scripts/provision-branches.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.sh" --repo "<repo>"
 ```
 
 ```powershell
-./scripts/provision-branches.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.ps1" -Repo "<repo>"
 ```
 
 #### Step 4 (5) — CI workflow (before protection) — ADD/PATCH non-destructively
@@ -163,11 +165,11 @@ Reconcile the integration + protected branches (create-if-missing) and default-b
 Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into the integration branch. **CI is reconciled strictly before protection** — its job names are the required status-check contexts (`BRIEF.md:90`; `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). Non-destructive: absent → created, byte-identical → no-op, differs → not clobbered (exit 3, flagged 🔴):
 
 ```bash
-./scripts/emit-ci-workflow.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/emit-ci-workflow.sh" --repo "<repo>"
 ```
 
 ```powershell
-./scripts/emit-ci-workflow.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/emit-ci-workflow.ps1" -Repo "<repo>"
 ```
 
 #### Step 4 (6) — Branch protection (after CI) — re-assert non-destructively
@@ -175,11 +177,11 @@ Re-assert `.github/workflows/ci.yml` running the recorded test/preflight command
 Re-assert the protected branch's server-side safety floor — the only re-assertion `update` performs (`BRIEF.md:65`): GETs existing protection first, keeps the **stronger value per field** (merge-UP), so a stronger-than-floor setting is preserved (`scripts/provision-protection.sh` header):
 
 ```bash
-./scripts/provision-protection.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.sh" --repo "<repo>"
 ```
 
 ```powershell
-./scripts/provision-protection.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.ps1" -Repo "<repo>"
 ```
 
 ### Step 5 — The live-only case (present live, absent from the refreshed plan) — FLAG 🔴, NEVER delete
@@ -208,7 +210,7 @@ Write a concise reconcile report (table form):
 
 ## Output style
 
-Be concise — report status flatly, no wall-of-text. Present the precondition status, bootstrapped-repo check, per-class reconcile, and per-entry outcomes as **tables**, not inline prose. Show every PATCH/PROPOSE as a unified-style diff before any write. Mark anything needing a human with 🔴 — every re-surfaced `[TBD]`, proposed edit, live-only flag, and blocked-on-precondition step (`BRIEF.md:80`).
+Report status flatly, no wall-of-text. Present the precondition status, bootstrapped-repo check, per-class reconcile, and per-entry outcomes as **tables**, not inline prose. Show every PATCH/PROPOSE as a unified-style diff before any write. Mark anything needing a human with 🔴 — every re-surfaced `[TBD]`, proposed edit, live-only flag, and blocked-on-precondition step (`BRIEF.md:80`).
 
 ## Non-negotiables
 

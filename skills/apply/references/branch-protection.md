@@ -15,23 +15,23 @@ Run the release target first, then the integration target when it applies. Both 
 
 ```bash
 # bash — --floor release is the DEFAULT; passing it explicitly is equivalent.
-./scripts/provision-protection.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.sh" --repo "<repo>"
 ```
 
 ```powershell
 # PowerShell 7+ (PascalCase -Flag params; -DryRun is a [switch]).
-./scripts/provision-protection.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.ps1" -Repo "<repo>"
 ```
 
 ### Target 2 — the integration branch (only when opted in)
 
 ```bash
 # bash — run ONLY when driver.json has integrationProtection: "floor".
-./scripts/provision-protection.sh --repo "<repo>" --floor integration
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.sh" --repo "<repo>" --floor integration
 ```
 
 ```powershell
-./scripts/provision-protection.ps1 -Repo "<repo>" -Floor integration
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-protection.ps1" -Repo "<repo>" -Floor integration
 ```
 
 - **Double gate — `apply` skips it and the script self-gates.** `apply` skips the invocation when the key is absent or `"none"`; if it is invoked anyway, the script re-reads `integrationProtection` itself and exits 0 with a "not opted in" line having changed nothing. Neither gate alone can protect a branch the user did not opt into, and neither can be bypassed by the other misfiring.
