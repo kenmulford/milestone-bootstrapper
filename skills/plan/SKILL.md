@@ -114,10 +114,10 @@ Section B — suite-readiness (Job 2, supporting) — record only non-default/cr
 | Version-file / bump target (Tier 6) | `captured` (`.claude-plugin/plugin.json`) plugin repo; `none` for `versioning: none`; **`[TBD]` 🔴** non-plugin, no version file ([BRIEF.md:38](../../BRIEF.md); `SPEC.md` §6.2). | `human-owned` |
 | Label taxonomy | One per label, from the authoritative set (`SPEC.md` §6.3). | `add` |
 | Branch model | One per branch (integration, protected) + default-branch policy; never delete (`SPEC.md` §6.3). | `add` |
-| Branch protection | No direct push, PR + CI check required, optional review. | `patch` |
 | CI workflow | `.github/workflows/` path running `unitTestCmd`/`preflightCmd` on PRs into the integration branch, the required check. | `add`/`patch` |
+| Branch protection | No direct push, PR + CI check required, optional review. | `patch` |
 
-Apply each entry's reconcile class + state from the Step 3 delta. Record the safe write order (`SPEC.md` §7): 1) project docs, 2) configs, 3) labels, 4) branch model → protection → CI. Protection + CI are **🔴 blocked-on-precondition when Step 0 flagged `gh`.**
+Apply each entry's reconcile class + state from the Step 3 delta. Record the safe write order (`SPEC.md` §7): 1) project docs, 2) configs, 3) labels, 4) branch model → CI → protection. CI + protection are **🔴 blocked-on-precondition when Step 0 flagged `gh`.**
 
 ### Step 5 — Assemble + write the plan file
 
