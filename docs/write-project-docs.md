@@ -4,16 +4,16 @@ The deterministic placement step that takes the **already-resolved** project
 understanding and writes it into the seven `.project/` docs — replacing the `[TBD]`
 placeholder under each template's stable `##` anchor. This is the back half of
 **Job 1** (project-docs population, [BRIEF.md:28-41](../BRIEF.md)): the
-understanding-interview engine (#4, [docs/understanding-interview.md](understanding-interview.md))
-and the stack detector (#3, [scripts/detect-stack.sh](../scripts/detect-stack.sh))
+understanding-interview engine ([docs/understanding-interview.md](understanding-interview.md))
+and the stack detector ([scripts/detect-stack.sh](../scripts/detect-stack.sh))
 produce the *content*; this layer puts it in the *right place*.
 
 > [!IMPORTANT]
-> **Scope — placement only.** This layer does **not** interview, does **not**
-> detect a stack, and does **not** decide which value belongs where. The
+> **Scope — placement only.** This layer does not interview, does not
+> detect a stack, and does not decide which value belongs where. The
 > composition judgment — which captured answer goes under which anchor, and
-> whether a field is `captured` / `none` / a genuine unknown — is done **upstream**
-> by the `plan` / `apply` skills (#9/#13) running #3 + #4. This layer receives a
+> whether a field is `captured` / `none` / a genuine unknown — is done upstream
+> by the `plan` / `apply` skills running the detector and the interview. This layer receives a
 > resolved field → content map and performs the mechanical, idempotent placement.
 > Keep the boundary clean: take the resolved map, replace the placeholder under the
 > named anchor, stop.
@@ -38,15 +38,15 @@ Both have identical flags, exit codes, and placement behavior, and emit
 
 ---
 
-## The compose-from-#3-+-#4 contract
+## The compose contract
 
 The caller (the `plan` / `apply` skill) builds the input map by composing two
 upstream sources, then hands it to this writer per target doc:
 
-1. **#4 interview answers** ([docs/understanding-interview.md §2](understanding-interview.md)) —
+1. **Interview answers** ([docs/understanding-interview.md §2](understanding-interview.md)) —
    the captured understanding, already classified into the three states (§3.2 of
    that doc): a real answer, a deliberate "None", or a genuine unknown.
-2. **#3 stack detection** ([scripts/detect-stack.sh](../scripts/detect-stack.sh)) —
+2. **Stack detection** ([scripts/detect-stack.sh](../scripts/detect-stack.sh)) —
    the detected framework/version pin, the best-practice convention note, and the
    `domainSkills` candidate. Detection *seeds* the defaults the interview
    confirms; the resolved value is what reaches this writer.
@@ -58,7 +58,7 @@ re-derives a value, never re-runs the interview, and never re-detects the stack.
 
 ## Field → doc → anchor routing (FIXED)
 
-The routing is **fixed and authoritative** — it is **not** re-specified here.
+The routing is **fixed and authoritative** — it is not re-specified here.
 This writer only places content under the anchor the caller names; the caller
 keys the map by the correct anchor. The single source of truth for the routing is:
 
@@ -90,9 +90,9 @@ one** (append-only, [docs/understanding-interview.md §3.1](understanding-interv
 
 ## The mechanism — replace the placeholder under a stable heading
 
-Each template heading carries a placeholder beneath it: a `> [TBD] — …`
-blockquote, a row (or rows) of `[TBD]` table cells, or `[TBD]` bullets (the
-`## Required states` block). The writer walks the file tracking the current `##`
+Each template heading carries a placeholder beneath it: a `> [TBD]` blockquote
+(optionally carrying an example, `> [TBD], e.g. …`), a row (or rows) of `[TBD]`
+table cells, or `[TBD]` bullets (the `## Required states` block). The writer walks the file tracking the current `##`
 heading; within the section of an anchor named in the input, it replaces the
 **first contiguous run of `[TBD]`-bearing lines** with the resolved content.
 
@@ -185,7 +185,7 @@ Env fallbacks (args win): `PROJECT_DOCS_TEMPLATE`, `PROJECT_DOCS_MAP`.
 | `0` | Doc populated, or already up to date (true no-op). |
 | `1` | Bad input / usage — missing flag, unreadable file, malformed map JSON, invalid state. |
 | `2` | Write / serialize failure — unwritable path, temp-file failure. |
-| `3` | **Unmatched anchor** — an input anchor is not a `##` heading in the template (a renamed/missing heading). A loud failure, never a silent skip; the file is left **unchanged**. |
+| `3` | **Unmatched anchor** — an input anchor is not a `##` heading in the template (a renamed/missing heading). A loud failure, never a silent skip; the file is left unchanged. |
 
 The unmatched-anchor failure is deliberate: a heading the writer cannot find
 means the template drifted from the routing, which would silently break the
@@ -198,6 +198,6 @@ template heading or the input anchor and re-run.
 
 A populated `.project/` doc: real captured understanding under stable anchors,
 deliberate "None" answers recorded as real answers, and only genuine unknowns
-left as flagged `[TBD]` 🔴. The `plan` / `apply` / `update` skills (#9/#13/#14)
+left as flagged `[TBD]` 🔴. The `plan` / `apply` / `update` skills
 own the surface, the plan file, and the orchestration; this writer owns the one
 deterministic placement step they call.

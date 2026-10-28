@@ -2,6 +2,16 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.9.1 — prompt-surface cleanup
+
+- Skills and interview docs name components instead of the issue that built them (`invokes #7`, `(reuses #5 and #8)`, `(#9/#13/#14)`). `docs/write-project-docs.md`'s `## The compose-from-#3-+-#4 contract` heading is now `## The compose contract`. No inbound cites.
+- Build-issue acceptance-criteria cites (`issue AC-3`, `issue Design`) and the cross-repo `milestone-feeder` `create/SKILL.md` line cites are removed. The rules they annotated are unchanged.
+- Behavior stated as a delta from an earlier version (`byte-identical to today`, `(unchanged)`, `no longer accepts`, `written before this fix`) is restated as current behavior.
+- The `check` skill description drops `(introduced by #129)` / `(introduced by #139)`.
+- Emphasis register: at most one bold run per line, on the clause that gates behavior; caps-emphasis words (`NOT`, `MUST`, `NEVER`, `AND`...) are lowercase. Named labels and operations (`READY`, `FLAGGED`, `DRIFT`, `ERROR-AND-STOP`, `PROPOSE`, `PATCH`, `ADD`, `PRESERVE`), headings, and quoted script text are unchanged. Covers `skills/**`, both interview docs, and `.project/conventions.md` / `environment.md`.
+- Line-for-line: no file's line count moves and no `SKILL.md` word count rises. No behavior, schema, or script change.
+- Also ships #178 (#177): the em-dashes in the six `project-docs/templates/` files are recast.
+
 ## v0.9.0 — citation anchors in the shipped templates
 
 **Theme:** a citation pinned to a line number is invalidated by any edit above that line, silently. milestone-driver v1.19.0 shipped `path (anchor)`, a citation keyed to a literal string instead of a line, and this release teaches that form to every repo the bootstrapper provisions. It updates the three places this plugin describes how to cite source: the vendored conventions template's exemplar slots, the project-docs contract, and the understanding interview's capture hint. The definition itself is not restated here. It ships in milestone-driver, and each change points at it by name.

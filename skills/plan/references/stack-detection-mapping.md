@@ -13,7 +13,7 @@ stack-derived defaults and for the plan's recorded entries:
 - `convention` → seeds the best-practice convention note (→ `conventions.md` anchors).
 - `manifestPin` → seeds the framework + version pin (→ `library-manifest.md#Runtime & frameworks`).
 - `domainSkills` → the `driver.json#domainSkills` candidate (a JSON-array literal, or **empty** for an unmapped stack — the detector omits rather than fabricates; an empty field stays a recorded "none", never an invented skill).
-- `stack` (the **descriptive** column value) → the `driver.json#stack` **enum** (`node|python|dotnet|maui|rust|plugin|none`). Map the detector's descriptive label to the enum by this fixed table — key on the literal `stack`-column value:
+- `stack` (the descriptive column value) → the `driver.json#stack` **enum** (`node|python|dotnet|maui|rust|plugin|none`). Map the detector's descriptive label to the enum by this fixed table — key on the literal `stack`-column value:
 
   | detector `stack` column | `driver.json#stack` enum |
   |---|---|

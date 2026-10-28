@@ -270,7 +270,7 @@ fi
 # Lines in the leading <!-- --> comment precede the first heading, so they are
 # never under a current anchor and are never touched.
 #
-# awk runs under LC_ALL=C (byte mode): the 🔴 marker and template glyphs (→ — “”)
+# awk runs under LC_ALL=C (byte mode): the 🔴 marker and template glyphs (· → …)
 # are multibyte UTF-8 and some awk builds abort classifying them in a UTF-8
 # locale; byte mode copies them through untouched, and the logic only does
 # index()/substr() on ASCII markers, so byte semantics are exactly correct.

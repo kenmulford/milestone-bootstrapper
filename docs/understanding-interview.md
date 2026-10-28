@@ -6,17 +6,17 @@ bootstrapper — the understanding layer that every later tool grounds in
 ([BRIEF.md:28-41](../BRIEF.md)).
 
 This document is the **engine**, not a user-facing command and not the
-orchestration. It is invoked *by* the `plan` skill (#9) and reconciled *by* the
-`apply` / `update` skills (#13/#14). They own the surface, the plan file, and the
+orchestration. It is invoked *by* the `plan` skill and reconciled *by* the
+`apply` / `update` skills. They own the surface, the plan file, and the
 writes; this engine owns the interview and the recording discipline that fills
 the doc sections.
 
 > [!IMPORTANT]
-> **Scope.** This engine captures understanding and records it into the
+> Scope. This engine captures understanding and records it into the
 > `.project/` doc sections — nothing else. It does **not** write
 > `.milestone-config/*` configs, set `domainSkills` / `versioning` keys,
-> provision labels / branches / CI, compose with stack **detection** output
-> (#7), or run any `plan` / `apply` / `update` orchestration (#9/#13/#14). Those
+> provision labels / branches / CI, compose with stack detection output
+> (the doc/config mapping), or run any `plan` / `apply` / `update` orchestration. Those
 > tools *consume* this engine's output. Keep the boundary clean: ask, record the
 > answer under the right `##` anchor, stop.
 
@@ -35,12 +35,12 @@ time. For every field:
 | Step | Rule |
 |---|---|
 | **Label** | State a plain-language label for what is being captured. |
-| **Default** | Show a detected default **or** an illustrative example — **never a blank prompt**. (Non-negotiable: [SKILL.md:235](../../milestone-driver/skills/setup/SKILL.md).) |
+| **Default** | Show a detected default or an illustrative example — never a blank prompt. (Non-negotiable: [SKILL.md:235](../../milestone-driver/skills/setup/SKILL.md).) |
 | **Choice** | Accept · edit · skip. Never leave a field set without an explicit choice. |
 | **Skip consequence** | On any skippable field, state the consequence on the same line — what stays `[TBD]` 🔴 and which downstream lens loses grounding. (Non-negotiable: [SKILL.md:236](../../milestone-driver/skills/setup/SKILL.md).) |
 | **Atomicity** | Never write a partial result. Either a tier's fields are resolved (captured / "none" / explicitly skipped to `[TBD]` 🔴) or nothing for that tier is written. (Non-negotiable: [SKILL.md:237](../../milestone-driver/skills/setup/SKILL.md).) |
 
-The detected default is *soft-coupled* to stack detection (#7/#3): when detection
+The detected default is *soft-coupled* to stack detection: when detection
 is available, seed the default from it; when it is not, fall back to an
 illustrative example. Either way the prompt is never blank — that is the
 load-bearing rule, not the source of the default.
@@ -56,7 +56,7 @@ load-bearing rule, not the source of the default.
 | **5 · Mandated packages** | Libraries/tooling required by purpose (distinct from what detection finds). | `library-manifest.md` |
 | **6 · Versioning policy** | SemVer yes/no, version-file location, bump cadence. | `conventions.md` |
 | **7 · Design system** *(UI projects only)* | Tokens, components, layout, required states, a11y, voice. | `design-system.md` + `tokens.json` |
-| **8 · Configuration & secrets** | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, **never values**. | `config-catalog.md` |
+| **8 · Configuration & secrets** | Config & secret key norms: connection strings, auth/JWT, third-party API keys, notification targets, CORS origins, per-env app config, build outputs — names · buckets · shapes · env · required?, never values. | `config-catalog.md` |
 
 Skip Tier 7 entirely for a repo with no UI surface — an all-`[TBD]`
 `design-system.md` is the correct "no design-lens grounding" signal
@@ -65,42 +65,42 @@ omission.
 
 ### Suite-readiness gate questions (recorded to §B, not to a `.project/` anchor)
 
-A small number of capture fields answer a **suite-readiness** question rather
+A small number of capture fields answer a suite-readiness question rather
 than a project-understanding one: their answer lands in the plan file's §B
 (`SPEC.md` §6), not under a `.project/` `##` anchor. Tier 6's versioning answer
 already works this way (it dual-writes `driver.json#versioning` /
 `feeder.json#versioning` alongside its `conventions.md` anchor). Ask these with
 the **same §1 pattern** — label, non-blank default, accept/edit/skip, skip
-consequence on the same line — and the **same §3.2 three states**. They add no
+consequence on the same line — and the same §3.2 three states. They add no
 `##` anchor, so the fixed §2 map below is unchanged.
 
 | Field | Question (ask verbatim) | Records to | Default to show | Skip → |
 |---|---|---|---|---|
-| Integration-branch gate | **"Gate the integration branch with CI checks? (PR + required checks; admins can still override for baselines and transient CI breaks)"** | `driver.json#integrationProtection` — `"floor"` when yes; the key is **omitted** for a recorded "none" | `none` (today's behavior — the integration branch is unprotected) | `none` |
+| Integration-branch gate | **"Gate the integration branch with CI checks? (PR + required checks; admins can still override for baselines and transient CI breaks)"** | `driver.json#integrationProtection` — `"floor"` when yes; the key is omitted for a recorded "none" | `none` (the integration branch is unprotected) | `none` |
 
-- **Three states, never collapsed** (§3.2): a **yes** is `captured` → `floor`; a
-  deliberate **"no" / "not yet"** is a recorded `none` (**no 🔴**) → the key is
+- **Three states, never collapsed** (§3.2): a yes is `captured` → `floor`; a
+  deliberate "no" / "not yet" is a recorded `none` (no 🔴) → the key is
   omitted; a genuine unknown the human cannot resolve stays `[TBD]` 🔴 and the
   key is left unwritten, never guessed to `floor`.
 - **Skip consequence (state it verbatim on the prompt line):** *the integration
   branch stays unprotected and the driver's PRs merge ungated.* Note this field
-  skips to a recorded **`none`**, not to `[TBD]` 🔴 — `none` is the documented
+  skips to a recorded `none`, not to `[TBD]` 🔴 — `none` is the documented
   default for this key (`SPEC.md` §6.1), so "not answered" and "answered no" land
-  on the same, safe, today's-behavior outcome. That is the one deliberate
+  on the same safe outcome. That is the one deliberate
   departure from §3.3 for this field, and it is why the consequence must be
   stated: skipping is a real choice here, not a deferral.
 - **Why the gate is deliberately weaker than the protected branch's.** The
   integration branch is the one `milestone-driver` opens a PR into per issue and
   auto-merges on green. A release-grade `enforce_admins: true` there deadlocks
   it — a transient or broken required check wedges the branch and no admin can
-  override, so nothing lands (bootstrapper #93). The floor this answer provisions
+  override, so nothing lands. The floor this answer provisions
   keeps PR + required checks and leaves admins able to override.
 
 ---
 
 ## 2. The capture-field → section map (fixed)
 
-This map is **fixed** — taken verbatim from [BRIEF.md:32-39](../BRIEF.md) and the
+This map is fixed — taken verbatim from [BRIEF.md:32-39](../BRIEF.md) and the
 template `##` anchors. The engine does **not** choose where an answer goes; it
 records each captured field under the stable anchor named here. Each anchor was
 read from `project-docs/templates/` and is a citation target — never rename one
@@ -186,7 +186,7 @@ token reads as unspecified (file header comment).
 > from it (e.g. FastAPI → Pydantic models, DI pattern, async I/O, router layout)
 > into the `conventions.md` anchors above and pin the framework + version under
 > `## Runtime & frameworks`. Wiring the driver's `domainSkills` from that capture
-> is a **config write owned by #7**, not this engine — record the understanding
+> is a **config write owned by `write-driver-config`**, not this engine — record the understanding
 > here; the config step consumes it.
 
 ---
@@ -198,8 +198,9 @@ consistency mechanism — get them exactly right.
 
 ### 3.1 Replace the placeholder under a stable heading — never rename the heading
 
-Each `##` heading carries a placeholder beneath it: a `> [TBD] — …` blockquote, a
-table row of `[TBD]` cells, or (in `## Required states`) `[TBD]` bullets. Record
+Each `##` heading carries a placeholder beneath it: a `> [TBD]` blockquote (optionally
+carrying an example, `> [TBD], e.g. …`), a table row of `[TBD]` cells, or (in
+`## Required states`) `[TBD]` bullets. Record
 the answer by **replacing the placeholder content under the heading**.
 
 **Never rename, reword, or reorder a `##` heading.** Headings are citation
@@ -217,8 +218,8 @@ There are three distinct, recorded states. They are **not** interchangeable
 | State | What it means | How it is recorded |
 |---|---|---|
 | **`captured`** | The user supplied a real answer. | The answer replaces the placeholder. Plain text, no 🔴. |
-| **`none`** | The user said **"None" / "not yet" / "not applicable"** — a *real, deliberate* answer that a thing does not exist (e.g. "no caching", "no async jobs"). | Record the word **"None"** (or the user's exact phrasing) as the answer. **No 🔴.** It is a captured decision, not an unknown. |
-| **`[TBD]` 🔴** | A **genuine unknown** the interview could not resolve and the user could not supply. | Leave the `[TBD]` placeholder in place and flag it 🔴. Never fabricate a value to fill it. |
+| **`none`** | The user said "None" / "not yet" / "not applicable" — a *real, deliberate* answer that a thing does not exist (e.g. "no caching", "no async jobs"). | Record the word "None" (or the user's exact phrasing) as the answer. No 🔴. It is a captured decision, not an unknown. |
+| **`[TBD]` 🔴** | A genuine unknown the interview could not resolve and the user could not supply. | Leave the `[TBD]` placeholder in place and flag it 🔴. Never fabricate a value to fill it. |
 
 > [!WARNING]
 > **Never collapse `none` into `[TBD]`.** A recorded "None" for caching is the
@@ -242,7 +243,7 @@ as recording "none" — skip = "unknown, deferred to a human", none = "the user
 answered that it does not exist."
 
 **One documented exception — the suite-readiness gate `integrationProtection`**
-(§1): that field skips to a recorded **`none`**, not to `[TBD]` 🔴, because `none`
+(§1): that field skips to a recorded `none`, not to `[TBD]` 🔴, because `none`
 is its documented default (`SPEC.md` §6.1), so "not answered" and "answered no"
 land on the same safe outcome. Do not flag it 🔴 for being unanswered — record
 `none`. It is the only field that departs from the rule above; every other
@@ -259,7 +260,7 @@ Honor the suite's shared output style
 - **🔴 on every flagged `[TBD]`.** Any anchor left as a genuine unknown is marked
   for a human.
 - **🔴 on the versioning-target caveat.** When versioning is captured for a
-  **non-plugin repo** and the version file is unresolved, flag it: the driver's
+  non-plugin repo and the version file is unresolved, flag it: the driver's
   bump target is `.claude-plugin/plugin.json` today, so a non-plugin version file
   may need the driver's target generalized ([BRIEF.md:38](../BRIEF.md);
   [SPEC.md §4.3 / version-file row](../SPEC.md)). Record this as a `[TBD]` 🔴, not
@@ -273,5 +274,5 @@ A set of **populated** `.project/` doc sections: real captured understanding
 under stable anchors, deliberate "None" answers recorded as real answers, and
 only genuine unknowns left as flagged `[TBD]` 🔴 ([BRIEF.md:41,66](../BRIEF.md)).
 The engine writes no configs, provisions nothing, and runs no orchestration —
-`plan` / `apply` / `update` (#9/#13/#14) and the config writer (#7) consume this
+`plan` / `apply` / `update` and the doc/config mapping consume this
 output from here.
