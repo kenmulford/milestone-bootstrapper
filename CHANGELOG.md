@@ -2,6 +2,12 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.9.2 — write order puts CI before branch protection
+
+- The step-4 order is now branch model → CI → branch protection in `SPEC.md` §7, the `SPEC.md` §8 skeleton, `BRIEF.md`, `skills/plan/SKILL.md` and `skills/plan/references/plan-file-skeleton.md`, and CI now precedes branch protection in the `SPEC.md` §6.3 table and the plan Step 4 §B table. This matches what `apply` and `update` already run. CI must exist first because protection registers its job names as required status checks (#186).
+- In both skeletons, the `ci.yml` row now comes before the `protection:` rows. The `### Branch model · protection · CI` group heading is unchanged.
+- No behavior, schema, or script change. `apply` and `update` are unchanged.
+
 ## v0.9.1 — prompt-surface cleanup
 
 - Skills and interview docs name components instead of the issue that built them (`invokes #7`, `(reuses #5 and #8)`, `(#9/#13/#14)`). `docs/write-project-docs.md`'s `## The compose-from-#3-+-#4 contract` heading is now `## The compose contract`. No inbound cites.

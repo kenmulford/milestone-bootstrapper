@@ -60,12 +60,12 @@ one into the other (`SPEC.md` §4.3).
 |--------|-------|-----------|-------|
 | branch: <integration>            | captured  | add   | integration branch |
 | branch: <protected>              | captured  | no-op | already the protected branch |
+| .github/workflows/ci.yml         | captured  | add   | runs <unitTestCmd> on PRs into <integration>     # 🔴 blocked-on-precondition when gh failed Step 0
 | protection: <protected>          | captured  | patch | PR required; CI check required; no direct push   # 🔴 blocked-on-precondition when gh failed Step 0
 | protection: <integration>        | captured  | patch | PR required; CI check required; admins may override (integration floor)   # `none` when not opted in — the branch stays unprotected and the driver's PRs merge ungated
-| .github/workflows/ci.yml         | captured  | add   | runs <unitTestCmd> on PRs into <integration>     # 🔴 blocked-on-precondition when gh failed Step 0
 
 ## Write order
-1. project docs  2. configs  3. labels  4. branch → protection → CI
+1. project docs  2. configs  3. labels  4. branch → CI → protection
 
 ## Grounding & flags
 - <each captured understanding> — grounded in <interview tier / detected signal / .project/<doc>.md#<section>>
@@ -73,5 +73,5 @@ one into the other (`SPEC.md` §4.3).
 - 🔴 <each [TBD] genuine unknown and its consequence>; <each blocked-on-precondition entry and the scope it needs>   # "none" when nothing is flagged
 
 ---
-This plan file is the build artifact — review it, then run `/milestone-bootstrapper:apply` to deploy it (it writes the project docs, the configs, the labels, the branch model, the protection, and the CI in the recorded write order). `update` reconciles a refreshed plan onto an already-bootstrapped repo, diff-first and non-destructive. `plan` wrote no project-docs, no config, no label, no branch, no protection, no CI, and no GitHub state of any kind.
+This plan file is the build artifact — review it, then run `/milestone-bootstrapper:apply` to deploy it (it writes the project docs, the configs, the labels, the branch model, the CI, and the protection in the recorded write order). `update` reconciles a refreshed plan onto an already-bootstrapped repo, diff-first and non-destructive. `plan` wrote no project-docs, no config, no label, no branch, no protection, no CI, and no GitHub state of any kind.
 ```
