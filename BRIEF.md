@@ -87,7 +87,7 @@ The bootstrapper **records** what the environment is; it never **creates** it. S
 - Plugin scaffold is foundational and can land first.
 - Job 1 (the understanding interview + project-docs population, incl. best-practice/`domainSkills` capture) is the spine and precedes the config writes that depend on it (e.g. `domainSkills` in `driver.json`).
 - `plan` (interview + inspection + plan-file) precedes any `apply` / `update` write.
-- Within `apply`: low-risk writes first (docs, configs, labels), then consequential writes (branch model → branch protection → CI, since protection depends on the CI check existing).
+- Within `apply`: low-risk writes first (docs, configs, labels), then consequential writes (branch model → CI → branch protection, since protection depends on the CI check existing).
 - Composability wiring depends on the config/label steps.
 
 ## Definition of done
