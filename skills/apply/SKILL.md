@@ -3,6 +3,8 @@ name: apply
 description: This skill should be used when the user invokes "/milestone-bootstrapper:apply", or asks to "apply the plan", "deploy the bootstrap", or "provision the repo from the approved plan". Executes the approved provisioning plan file on the repo — project docs, configs, labels, branch model, CI workflow, and branch protection — in a fixed safe order, by invoking the already-built component scripts. Reads the plan file and deploys exactly it; it does not re-interview, re-detect, or re-plan. Ordered and idempotent: a re-run after a partial failure resumes from the first incomplete step, as long as every component script remains independently idempotent. No flags. Authors no application code; opens no PRs.
 ---
 
+If `${CLAUDE_PLUGIN_ROOT}` appears unexpanded, it is the parent of the `skills/` directory that holds this file. Codex: [`../runtime-codex.md`](../runtime-codex.md).
+
 # apply — deploy the approved provisioning plan to the repo (read-the-plan, faithful, ordered)
 
 Resolve the provisioning plan file `plan` wrote for this project (same deterministic slug), then execute **exactly it**: populate the project docs, write the configs, provision the labels, create the branch model, emit the CI workflow, and assert branch protection — each a thin invocation of the component script that owns that slice, in the safe write order (`SPEC.md` §7). Where `plan` *previews* the provisioning plan, `apply` *executes* it.
@@ -124,7 +126,7 @@ If any single step's component fails mid-run (e.g. branch-protection fails for i
 
 ## Output style
 
-Be concise — report status and outcomes flatly, no wall-of-text. Present the precondition status, the plan summary, the six-step deploy, and the per-step outcomes as **tables**, not inline prose. Mark anything that needs a human with 🔴 — every re-surfaced `[TBD]` and every blocked-on-precondition step. (Mirrors the suite's shared output style — [BRIEF.md:80](../../BRIEF.md); `plan`'s output style.)
+Report status and outcomes flatly, no wall-of-text. Present the precondition status, the plan summary, the six-step deploy, and the per-step outcomes as **tables**, not inline prose. Mark anything that needs a human with 🔴 — every re-surfaced `[TBD]` and every blocked-on-precondition step. (Mirrors the suite's shared output style — [BRIEF.md:80](../../BRIEF.md); `plan`'s output style.)
 
 ## Non-negotiables
 

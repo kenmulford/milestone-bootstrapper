@@ -8,13 +8,13 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 # bash — feeder.json slice: the feeder-owned keys projectDocs / versioning.
 # Omit --project-docs when at the bundled default; omit --versioning when the
 # Tier-6 answer was skipped (versioning has NO default).
-./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"] [--versioning "<semver|none>"]
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-feeder-config.sh" --repo "<repo>" [--project-docs "<path>"] [--versioning "<semver|none>"]
 
 # bash — driver.json slice: the three Core keys are REQUIRED; optionals are
 # omitted when the plan did not record them (never written as null/empty). The
 # branch names recorded in §B (branch model) ARE driver.json#integrationBranch /
 # #protectedBranch — write them here so steps (4)-(6) can read them back.
-./scripts/write-driver-config.sh --repo "<repo>" \
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-driver-config.sh" --repo "<repo>" \
   --integration-branch "<integration>" --protected-branch "<protected>" \
   --source-globs '<json string[]>' \
   [--project-docs "<path>"] \
@@ -25,8 +25,8 @@ Pass each writer the **resolved values from the §B Configs rows** (the writer r
 
 ```powershell
 # PowerShell 7+ — the behaviorally-equivalent twins (PascalCase -Flag params).
-./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"] [-Versioning "<semver|none>"]
-./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-ProjectDocs "<path>"] [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-IntegrationProtection '<none|floor>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-feeder-config.ps1" -Repo "<repo>" [-ProjectDocs "<path>"] [-Versioning "<semver|none>"]
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-driver-config.ps1" -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-ProjectDocs "<path>"] [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-IntegrationProtection '<none|floor>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 
 - **`--project-docs` / `-ProjectDocs`** → pass the same Step-0-resolved project-docs value to both writers, so `feeder.json#projectDocs` and `driver.json#projectDocs` cannot diverge. `apply` passes the resolved value uniformly; the writer itself omits the key when it equals the default `.project/` (omit-when-default lives in the writer, not in `apply`).

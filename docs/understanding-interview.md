@@ -1,6 +1,6 @@
 # The understanding-interview engine
 
-The reusable procedure that captures what Claude must know about a project and
+The reusable procedure that captures what the model must know about a project and
 records it into the project docs (`.project/`). This is **Job 1** of the
 bootstrapper — the understanding layer that every later tool grounds in
 ([BRIEF.md:28-41](../BRIEF.md)).
