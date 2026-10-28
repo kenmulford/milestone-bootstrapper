@@ -43,14 +43,14 @@ changing the detector:
 # bash — read-only stack detection, once per app-root. appRoots default ["."]
 # runs the detector exactly once against the repo root.
 for root in "${appRoots[@]}"; do        # e.g. (".") or ("siteroot/web" "siteroot/api")
-  ./scripts/detect-stack.sh "$root"     # the detector's [REPO_DIR] positional
+  "${CLAUDE_PLUGIN_ROOT}/scripts/detect-stack.sh" "$root"     # the detector's [REPO_DIR] positional
 done
 ```
 
 ```powershell
 # PowerShell 7+ — the cross-platform twin (identical findings, -RepoDir positional).
 foreach ($root in $appRoots) {          # e.g. @('.') or @('siteroot/web','siteroot/api')
-  ./scripts/detect-stack.ps1 $root
+  & "${CLAUDE_PLUGIN_ROOT}/scripts/detect-stack.ps1" $root
 }
 ```
 

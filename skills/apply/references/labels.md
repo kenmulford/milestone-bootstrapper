@@ -4,12 +4,12 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (3). Provision the label 
 
 ```bash
 # bash
-./scripts/provision-labels.sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.sh"
 ```
 
 ```powershell
 # PowerShell 7+
-./scripts/provision-labels.ps1
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.ps1"
 ```
 
 - `--force` upsert: creates a missing label, corrects a drifted color/description, never duplicates on re-run (`scripts/provision-labels.sh` header).

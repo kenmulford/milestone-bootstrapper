@@ -3,6 +3,8 @@ name: check
 description: This skill should be used when the user invokes "/milestone-bootstrapper:check", or asks to "check the project docs for drift", "has the project docs gone stale", "did my project docs go stale", "review .project/ against the live repo", "audit the project docs before I trust them", "is the bootstrap still accurate", "check the driver config for drift", or "has domainSkills drifted". Thin, read-only orchestration layer that invokes the component scripts `scripts/check-project-docs.{sh,ps1}` and `scripts/check-driver-config.{sh,ps1}` and surfaces any detected drift — between the repo's `.project/` docs and the live stack, and between `.milestone-config/driver.json`'s `domainSkills` and the live stack — as an advisory review prompt — the human decides what to do with it. Read-only: it writes nothing, proposes nothing, and never invokes `update`. No flags. Authors no code; opens no PRs.
 ---
 
+If `${CLAUDE_PLUGIN_ROOT}` appears unexpanded, it is the parent of the `skills/` directory that holds this file. Codex: [`../runtime-codex.md`](../runtime-codex.md).
+
 # check — read-only drift audit against `.project/` docs and driver config
 
 Invoke the two component scripts — `scripts/check-project-docs.{sh,ps1}` and `scripts/check-driver-config.{sh,ps1}` — and report exactly what each finds. `check-project-docs`'s scope is exactly one doc+anchor — `.project/library-manifest.md#Runtime & frameworks`; it does not diff `conventions.md` or any other `.project/` doc. `check-driver-config`'s scope is exactly one field of one file — `.milestone-config/driver.json`'s `domainSkills` array; it touches nothing else in `driver.json` and nothing in `.project/`. `check`'s scope is therefore exactly the union of what these two scripts check — it never audits more than the two scripts do, and it widens automatically if either script's scope ever widens. This is a fourth verb alongside `plan`/`apply`/`update`, not an extension of `update`: `update` writes and reconciles state, `check` writes nothing and only reports — serving the suite's auditability goal (`.project/design-philosophy.md#What we optimize for`). `check` **composes** the two scripts; it performs none of their diagnostic logic itself (`.project/design-philosophy.md#Layering & boundaries` — "skills orchestrate ordering and reporting only... each step is a thin invocation of the component script that owns its slice — skills never duplicate component logic").
@@ -45,11 +47,11 @@ $haveCfg  = (Test-Path -LiteralPath $cfg)  -and ((Get-ChildItem -LiteralPath $cf
 Run from the repo root, with no flags:
 
 ```bash
-./scripts/check-project-docs.sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-project-docs.sh"
 ```
 
 ```powershell
-./scripts/check-project-docs.ps1
+& "${CLAUDE_PLUGIN_ROOT}/scripts/check-project-docs.ps1"
 ```
 
 **Never pass `--check`/`-Check`.** That flag turns drift into a nonzero (CI-gating) exit — it is the CI-only path the script's own header reserves for automated gating, not this human-facing verb. Capture stdout, stderr, and the real exit code.
@@ -72,11 +74,11 @@ Test-Path -LiteralPath ".milestone-config/driver.json" -PathType Leaf
 | **True** (file present) | Run from the repo root, with no flags: |
 
 ```bash
-./scripts/check-driver-config.sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-driver-config.sh"
 ```
 
 ```powershell
-./scripts/check-driver-config.ps1
+& "${CLAUDE_PLUGIN_ROOT}/scripts/check-driver-config.ps1"
 ```
 
 **Never pass `--check`/`-Check`** — same CI-only reservation as `check-project-docs` (Step 1a). Capture stdout, stderr, and the real exit code.
@@ -107,7 +109,7 @@ One combined, aggregated report per run: nothing-to-check-yet (Step 0, applies o
 
 ## Output style
 
-Be concise — report each script's outcome flatly, no wall-of-text. Relay each script's own stdout/stderr verbatim rather than paraphrasing it, attributed by script name. Present a multi-item drift list as a table, not inline prose. Mark a drift outcome with 🔴 — it needs a human to look, even though nothing failed. Mark an error outcome with 🔴 too — that one is a real failure (exit 1) the human needs to see. The `check-driver-config` precondition-skipped advisory is not an error — mark it plainly, no 🔴. (Mirrors the suite's shared output style — `skills/plan/SKILL.md` Output style, `skills/update/SKILL.md` Output style.)
+Report each script's outcome flatly, no wall-of-text. Relay each script's own stdout/stderr verbatim rather than paraphrasing it, attributed by script name. Present a multi-item drift list as a table, not inline prose. Mark a drift outcome with 🔴 — it needs a human to look, even though nothing failed. Mark an error outcome with 🔴 too — that one is a real failure (exit 1) the human needs to see. The `check-driver-config` precondition-skipped advisory is not an error — mark it plainly, no 🔴. (Mirrors the suite's shared output style — `skills/plan/SKILL.md` Output style, `skills/update/SKILL.md` Output style.)
 
 ## Non-negotiables
 

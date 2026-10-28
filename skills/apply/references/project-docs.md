@@ -6,12 +6,12 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (1) — the lowest-risk w
 # bash — populate one doc from the recorded per-anchor map. <map> is the JSON
 # the caller composed from the §A captured understanding keyed by the FIXED anchor
 # map; each value is { "state": "captured"|"none"|"tbd", "content": "<text>" }.
-./scripts/write-project-docs.sh --template "<projectDocs>/<doc>" --map "<map.json>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-project-docs.sh" --template "<projectDocs>/<doc>" --map "<map.json>"
 ```
 
 ```powershell
 # PowerShell 7+ — the behaviorally-equivalent twin (PascalCase -Flag params).
-./scripts/write-project-docs.ps1 -Template "<projectDocs>/<doc>" -Map "<map.json>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-project-docs.ps1" -Template "<projectDocs>/<doc>" -Map "<map.json>"
 ```
 
 - A row whose **State is `none`** records the recorded "None" answer under its anchor (`--state none` → no 🔴); a doc that is wholly not-applicable (e.g. `design-system.md` / `tokens.json` for a backend-only repo) is a no-op reported as a no-op.

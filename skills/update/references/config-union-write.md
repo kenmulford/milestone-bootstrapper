@@ -25,13 +25,13 @@ The writers stay idempotent under this discipline: when the assembled union equa
 # bash — feeder.json slice. Pass the UNION: every live key (live value if the
 # plan doesn't change it, plan value if it does) PLUS plan additions — so the
 # whole-file rewrite reproduces every live key and drops none.
-./scripts/write-feeder-config.sh --repo "<repo>" [--project-docs "<path>"]
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-feeder-config.sh" --repo "<repo>" [--project-docs "<path>"]
 
 # bash — driver.json slice. Same UNION rule. The three Core keys are always
 # written; every OTHER live key is passed back with its live value unless the plan
 # changes it; plan additions are added. An optional NEVER carried live and never
 # added by the plan stays omitted (never written as null).
-./scripts/write-driver-config.sh --repo "<repo>" \
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-driver-config.sh" --repo "<repo>" \
   --integration-branch "<integration>" --protected-branch "<protected>" \
   --source-globs '<json string[]>' \
   [--domain-skills '<json string[]>'] [--non-negotiables '<json string[]>'] [--versioning false] [--ui-surface-globs '<json>'] \
@@ -41,8 +41,8 @@ The writers stay idempotent under this discipline: when the assembled union equa
 
 ```powershell
 # PowerShell 7+ — behaviorally-equivalent twins (PascalCase -Flag params). Same UNION rule.
-./scripts/write-feeder-config.ps1 -Repo "<repo>" [-ProjectDocs "<path>"]
-./scripts/write-driver-config.ps1 -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-IntegrationProtection '<none|floor>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-feeder-config.ps1" -Repo "<repo>" [-ProjectDocs "<path>"]
+& "${CLAUDE_PLUGIN_ROOT}/scripts/write-driver-config.ps1" -Repo "<repo>" -IntegrationBranch "<integration>" -ProtectedBranch "<protected>" -SourceGlobs '<json string[]>' [-DomainSkills '<json>'] [-NonNegotiables '<json>'] [-Versioning false] [-UiSurfaceGlobs '<json>'] [-Stack '<enum>'] [-StackVersionFile '<path>'] [-IntegrationProtection '<none|floor>'] [-UnitTestCmd "<cmd>"] [-PreflightCmd "<cmd>"] [-E2eEnv '<json>']
 ```
 
 ## Per-key nuances

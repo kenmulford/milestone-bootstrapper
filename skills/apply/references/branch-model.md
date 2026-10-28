@@ -4,12 +4,12 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (4). Create the integrati
 
 ```bash
 # bash
-./scripts/provision-branches.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.sh" --repo "<repo>"
 ```
 
 ```powershell
 # PowerShell 7+ (PascalCase -Flag params; -DryRun is a [switch]).
-./scripts/provision-branches.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.ps1" -Repo "<repo>"
 ```
 
 - Reads `integrationBranch` / `protectedBranch` from the `driver.json` written at step (2). Creates the protected branch (the base), branches integration off it, points the default branch at protected. **Never deletes, force-pushes, or resets** (`scripts/provision-branches.sh` header) — a re-run on an already-correct repo changes nothing.

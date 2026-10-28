@@ -33,6 +33,16 @@ Or install just this plugin from its own marketplace — still supported:
 /plugin install milestone-bootstrapper@milestone-bootstrapper
 ```
 
+### Codex
+
+Add the suite marketplace, then install `milestone-bootstrapper` from `/plugins` inside Codex:
+
+```
+codex plugin marketplace add kenmulford/milestone-suite
+```
+
+The plugin ships no hooks, so there is nothing to trust in `/hooks`. Invoke a skill with a `$` mention that carries the plugin prefix: `$milestone-bootstrapper:plan`, `:apply`, `:update`, `:check`. The bare `$plan` and `$update` also match milestone-feeder's skills.
+
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 900}} }%%
 flowchart TD
@@ -125,7 +135,7 @@ A few things need to be in place for `apply` and `update` to do their work. Each
 
 - **`gh` (the GitHub CLI) installed and signed in**, in a directory connected to a GitHub repo — otherwise we can't create your branches, labels, CI, or protection.
 - **`gh` with admin on the repo** — branch protection goes through the GitHub API and needs it. Without admin everything else still runs, and we flag the protection step rather than fail quietly. The floor it sets requires a pull request and passing CI, but zero human approvals — it's not a peer-review gate.
-- **Claude allowed to run** `gh label create`, `gh api`, `gh repo edit`, and `git`, and to **write** under `.project/`, `.milestone-config/`, and `.github/workflows/`.
+- **Claude Code or Codex allowed to run** `gh label create`, `gh api`, `gh repo edit`, and `git`, and to **write** under `.project/`, `.milestone-config/`, and `.github/workflows/`.
 - **bash with `jq`, or PowerShell 7+** — every step ships both, so it runs on either.
 
 `plan` and `check` need none of this. `plan` interviews, reads, and detects — what it writes is a local file you review; `check` only reads and reports. The writes above are for `apply` and `update`.

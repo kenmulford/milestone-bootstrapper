@@ -162,7 +162,7 @@ independently, below.
 ## Live-recheck after the bulk label/branch scripts
 
 ```bash
-./scripts/provision-labels.sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.sh"
 # LABEL_WORKLIST: newline-separated bare label names (Step 3's Labels sub-table
 # add-class rows). No per-target flag exists, so re-list live labels and derive
 # each Target's done status from presence (create-if-missing => present = done).
@@ -175,7 +175,7 @@ printf '%s\n' "$LABEL_WORKLIST" | while IFS= read -r target; do
   fi
 done
 
-./scripts/provision-branches.sh --repo "<repo>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.sh" --repo "<repo>"
 # BRANCH_WORKLIST: newline-separated "branch: <name>" Targets (Step 3's Branch
 # model sub-table add-class rows). Re-derive existence per branch the same way
 # provision-branches.sh's own branch_exists() does (scripts/provision-branches.sh).
@@ -191,14 +191,14 @@ done
 ```
 
 ```powershell
-./scripts/provision-labels.ps1
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-labels.ps1"
 $liveLabels = gh label list --limit 100 --json name --jq '.[].name'
 foreach ($target in $LabelWorklist) {
     if ((Test-EntryDone $target)) { continue }
     if ($liveLabels -contains $target) { Set-EntryDone $target }
 }
 
-./scripts/provision-branches.ps1 -Repo "<repo>"
+& "${CLAUDE_PLUGIN_ROOT}/scripts/provision-branches.ps1" -Repo "<repo>"
 $slugRepo = gh repo view --json nameWithOwner --jq '.nameWithOwner'
 foreach ($target in $BranchWorklist) {
     if ((Test-EntryDone $target)) { continue }

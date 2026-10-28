@@ -41,3 +41,15 @@ jobs:
         uses: actions/checkout@v7
       - name: Check SKILL.md word ceilings
         run: ./scripts/check-skill-size.sh
+
+  # Codex gate: .codex-plugin/plugin.json parses, matches .claude-plugin's
+  # name/version/description, its paths exist, and no skill invokes a script
+  # CWD-relative. See scripts/check-codex-support.sh.
+  codex-support-gate:
+    name: codex-support gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code under review
+        uses: actions/checkout@v7
+      - name: Check the Codex manifest and script invocations
+        run: ./scripts/check-codex-support.sh

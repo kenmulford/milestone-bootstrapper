@@ -2,6 +2,15 @@
 
 Notable changes to the **milestone-bootstrapper** plugin, newest first.
 
+## v0.10.0 — Codex support
+
+- `.codex-plugin/plugin.json` ships beside `.claude-plugin/plugin.json`, with the same name, version, and description. Codex discovers the four skills from `./skills/`.
+- Every script invocation in skill text is `"${CLAUDE_PLUGIN_ROOT}/scripts/<x>"` (`& "..."` for `.ps1`). The CWD-relative `./scripts/<x>` form failed in a consumer repo, which has no `scripts/`, on both runtimes. Run directory and `--repo` defaults are unchanged.
+- Each `SKILL.md` opens with a resolution line for an unexpanded `${CLAUDE_PLUGIN_ROOT}` and points to `skills/runtime-codex.md`. That file maps `/milestone-bootstrapper:<skill>` to `$milestone-bootstrapper:<skill>` and makes the `plan` and `update` human gates fail closed on Codex.
+- New CI job `codex-support gate` (`scripts/check-codex-support.sh`): the Codex manifest parses, matches the Claude manifest, references only existing paths, and no skill invokes a script CWD-relative.
+- README: Codex install section. The bootstrapper writes no Claude-specific consumer config (`.claude/`, `CLAUDE.md`), so Codex needs no counterpart.
+- No schema change to `driver.json` or `feeder.json`. No script behavior change.
+
 ## v0.9.2 — write order puts CI before branch protection
 
 - The step-4 order is now branch model → CI → branch protection in `SPEC.md` §7, the `SPEC.md` §8 skeleton, `BRIEF.md`, `skills/plan/SKILL.md` and `skills/plan/references/plan-file-skeleton.md`, and CI now precedes branch protection in the `SPEC.md` §6.3 table and the plan Step 4 §B table. This matches what `apply` and `update` already run. CI must exist first because protection registers its job names as required status checks (#186).
