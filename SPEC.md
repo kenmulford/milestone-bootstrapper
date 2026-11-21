@@ -308,8 +308,8 @@ project it is `none`. The three states keep the caveat legible and reviewable.
 |---|---|---|---|
 | **Label taxonomy** | One entry per label to create-if-missing: the driver's (`needs design`, `needs decision`, `blocked`, `needs review`, `judgment call`, `in progress`), the feeder's (`ui`, `logic`, `risk:light`, `risk:heavy`), and the suite's (`md-epic`), owned by the bootstrapper as the label's creator. Identified **by name** (repo-local). | `add` (create-if-missing; never delete) | Idempotent create-if-missing. |
 | **Branch model** | One entry per branch (integration, protected) to create-if-missing; the default-branch policy ([BRIEF.md:49](BRIEF.md)). Identified **by name**. | `add` | Never delete a branch ([BRIEF.md:65](BRIEF.md)). |
-| **CI workflow** | The GitHub Actions workflow (target path under `.github/workflows/`) running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration branch, registered as the required status check ([BRIEF.md:51](BRIEF.md)). | `add` (file absent) / `patch` (drifted) | The protection's required check depends on this workflow's name. |
-| **Branch protection** | The rules for **each protected target**: no direct push, PR required, CI status check required, optional review ([BRIEF.md:50](BRIEF.md)). Targeted **by branch name**. One entry per target — the **protected** branch always (release floor, `enforce_admins` on), plus the **integration** branch only when `integrationProtection: "floor"` (§6.1) is recorded (integration floor, `enforce_admins` off so admins may still override). | `patch` | Re-asserting protection to match the plan is allowed ([BRIEF.md:65](BRIEF.md)). The integration floor is create-only or reconcile-UP: it **refuses** (changes nothing, exits non-zero) on a branch already carrying `enforce_admins: true` rather than weaken it. |
+| **CI workflow** | The GitHub Actions workflow (target path under `.github/workflows/`) running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration and protected branches, required as a status check only when it is the current generated file ([BRIEF.md:51](BRIEF.md)). | `add` (file absent) / `patch` (drifted) | Protection requires `unit-tests`/`preflight` only when `emit-ci-workflow --check` exits 0. |
+| **Branch protection** | The rules for **each protected target**: no direct push, PR required, generated CI checks required, optional review ([BRIEF.md:50](BRIEF.md)). Targeted **by branch name**. One entry per target — the **protected** branch always (release floor, `enforce_admins` on), plus the **integration** branch only when `integrationProtection: "floor"` (§6.1) is recorded (integration floor, `enforce_admins` off so admins may still override). | `patch` | Re-asserting protection to match the plan is allowed ([BRIEF.md:65](BRIEF.md)). The integration floor is create-only or reconcile-UP: it **refuses** (changes nothing, exits non-zero) on a branch already carrying `enforce_admins: true` rather than weaken it. |
 
 Every target here is a **repo-local / brief-local identifier** — a label name, a branch
 name, a workflow path — never a GitHub-assigned number (§3).
@@ -327,7 +327,7 @@ then the dependent chain:
    capture having been recorded.
 3. **Labels** (§6.3).
 4. **Branch model → CI workflow → branch protection** (§6.3) — in this order:
-   protection's required status check depends on the CI workflow existing. The
+   protection requires the generated CI checks only when the CI workflow exists. The
    protection step covers **each protected target** (§6.3) — it iterates the
    targets within the one step; it is not a further ordering constraint.
 
