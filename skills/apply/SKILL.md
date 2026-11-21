@@ -79,7 +79,7 @@ The fields `apply` reads: Slug (identity — Step 1 resolved the file by it); St
 
 This is the `SPEC.md` §7 safe write order: **low-risk writes first (docs, configs, labels), then the consequential tail (branch model → CI → branch protection)**. Each step is a thin invocation of the component that owns its slice — `apply` orchestrates ordering and reporting only, never duplicating a component's logic (`SPEC.md` §7) — and each component is itself independently idempotent (Step 4). Steps (3)–(6) each also perform a cheap post-write read-back with exactly one retry on mismatch before halting — never a second retry, never a rollback; see each step's reference file for the exact check.
 
-> Order note — CI before protection. Branch protection registers the CI workflow's job names (`unit-tests`/`preflight`) as required status-check contexts, which must already exist when protection runs ([BRIEF.md:90](../../BRIEF.md); `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). So the tail's order is **branch model → CI → branch protection** — CI strictly before protection, the topological resolution of that dependency (`SPEC.md` §7).
+> Order note — CI before protection. Branch protection requires the generated CI job names (`unit-tests`/`preflight`) as status checks, only when `emit-ci-workflow --check` exits 0, so that file must exist when protection runs ([BRIEF.md:90](../../BRIEF.md); `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). So the tail's order is **branch model → CI → branch protection** — CI strictly before protection, the topological resolution of that dependency (`SPEC.md` §7).
 
 Every component ships as bash/PowerShell twins — same behavior, different CLI convention (bash `--flag`/`--dry-run`; PowerShell PascalCase `-Flag`/`[switch]$DryRun`). A `.ps1` won't bind bash-style `--flag` tokens, so use the twin matching your shell. Resolve `<projectDocs>` and `<repo>` from Step 0; each step below points to its reference file for the exact invocation and flags, needed only when actually running or building that step.
 
@@ -101,11 +101,11 @@ Create the integration + protected branches if missing and set the default-branc
 
 #### Step (5) — CI workflow (before protection)
 
-Emit `.github/workflows/ci.yml` from the `driver.json` test/preflight commands. Its job `name:` values are the required-status-check contexts step (6) registers — why CI must land first. An absent command still gets a 🔴-flagged job rather than a fabricated one; a file that differs from the emitted shape is never clobbered (exit 3, surfaced 🔴 — `update`'s job to reconcile). CLI: [`references/ci-workflow.md`](references/ci-workflow.md).
+Emit `.github/workflows/ci.yml` from the `driver.json` test/preflight commands. Step (6) requires its job names `unit-tests`/`preflight` only when `emit-ci-workflow --check` exits 0 — why CI must land first. An absent command still gets a 🔴-flagged job rather than a fabricated one; a file that differs from the emitted shape is never clobbered (exit 3, flagged 🔴, `apply` continues to step (6)). To take the generated file, review the diff with `emit-ci-workflow --check`, then delete `ci.yml` and re-run; local edits to it are lost. CLI: [`references/ci-workflow.md`](references/ci-workflow.md).
 
 #### Step (6) — Branch protection (after CI)
 
-Iterate the protection targets: the protected branch always; the integration branch only when `driver.json` has `integrationProtection: "floor"` (else skip — the script self-gates too). Assert each target's floor (no direct push, PR + CI checks required, `enforce_admins` per floor, no force-push/deletions) against the contexts CI just emitted — that file must already exist, which is why this step is last. **Merges UP**: GETs existing protection and keeps the stronger value per field, never reconciling down. Remote step needing repo-admin, 🔴 blocked-on-precondition per Step 0. Per-target CLI: [`references/branch-protection.md`](references/branch-protection.md).
+Iterate the protection targets: the protected branch always; the integration branch only when `driver.json` has `integrationProtection: "floor"` (else skip — the script self-gates too). Assert each target's floor (no direct push, PR required, `enforce_admins` per floor, no force-push/deletions, plus `unit-tests`/`preflight` only when `emit-ci-workflow --check` exits 0; otherwise no check is added and existing ones are listed 🔴) — CI runs first, which is why this step is last. **Merges UP**: GETs existing protection and keeps the stronger value per field, never reconciling down. Remote step needing repo-admin, 🔴 blocked-on-precondition per Step 0. Per-target CLI: [`references/branch-protection.md`](references/branch-protection.md).
 
 ### Step 4 — Idempotency + resume model (no apply-side state ledger)
 
@@ -113,7 +113,7 @@ Iterate the protection targets: the protected branch always; the integration bra
 
 ### Partial-failure path (halt, name the step, resume on re-run)
 
-If any single step's component fails mid-run (e.g. branch-protection fails for insufficient `gh` scope, or `emit-ci-workflow` exits 3 on a diverged file), `apply` **halts** — it does not run the remaining steps against a missing prerequisite. The failure is defined, not silent:
+If any single step's component fails mid-run (e.g. branch-protection fails for insufficient `gh` scope, or `emit-ci-workflow` exits 1 or 2), `apply` **halts** — it does not run the remaining steps against a missing prerequisite. The failure is defined, not silent:
 
 | On failure, `apply` does | It does not |
 |---|---|
@@ -131,7 +131,7 @@ Report status and outcomes flatly, no wall-of-text. Present the precondition sta
 ## Non-negotiables
 
 - **Deploys the plan file; re-derives nothing.** No re-run of the understanding interview, stack detection, or plan re-composition — recorded values (§A docs, §B configs/labels/branch/protection/CI) pass straight to the component scripts. The plan-file format is owned by `SPEC.md`, not redefined here ([BRIEF.md:22-26,64](../../BRIEF.md); `SPEC.md` §1).
-- **Fixed safe write order: docs → configs → labels → branch model → CI → branch protection**, with CI strictly before protection — protection's required status checks must already exist as CI job names ([BRIEF.md:90](../../BRIEF.md); `SPEC.md` §7).
+- **Fixed safe write order: docs → configs → labels → branch model → CI → branch protection**, with CI strictly before protection — the generated CI job names protection requires must already exist ([BRIEF.md:90](../../BRIEF.md); `SPEC.md` §7).
 - **Each step is a thin invocation of its owning component** (docs→`write-project-docs`, configs→`write-feeder-config`/`write-driver-config`, labels→`provision-labels`, branch model→`provision-branches`, CI→`emit-ci-workflow`, protection→`provision-protection`) — `apply` orchestrates only, duplicating no component's logic (`SPEC.md` §7).
 - **Non-interactive, direct-write path only.** Config writers are invoked directly, never the interactive `setup` interviews — running those mid-`apply` would re-interview the user, breaking the plan-is-the-contract model (`scripts/write-driver-config.sh`/`write-feeder-config.sh` headers).
 - **Ordered + idempotent, no apply-side state ledger.** A re-run after a partial failure resumes from the first incomplete step by re-running `apply`, as long as every component script remains independently idempotent; re-asserting protection (merge-UP) is allowed, never destructive ([BRIEF.md:54,65](../../BRIEF.md)).
