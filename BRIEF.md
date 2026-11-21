@@ -47,8 +47,8 @@ So the feeder and driver run with no further setup:
 - **Configs** — `.milestone-config/driver.json` (branches, `sourceGlobs`, `uiSurfaceGlobs`, `unitTestCmd`, `preflightCmd`, `e2eEnv`, **`domainSkills`** from the stack capture, **`versioning`** from the versioning policy) and `feeder.json` (`projectDocs`); minimal, only non-default keys.
 - **Label taxonomy** — create-if-missing the suite's label taxonomy (the authoritative set is `SPEC.md` §6.3).
 - **Branch model** — create the integration and protected branches if missing; set the default-branch policy.
-- **Branch protection** — on the protected branch: no direct push, PR required, CI status check required (and optionally a review). Via the GitHub API.
-- **CI workflow** — a GitHub Actions workflow running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration branch, registered as the required status check.
+- **Branch protection** — on the protected branch: no direct push, PR required, generated CI checks required (and optionally a review). Via the GitHub API.
+- **CI workflow** — a GitHub Actions workflow running the detected `unitTestCmd` / `preflightCmd` on PRs into the integration and protected branches, required as a status check only when generated.
 - **Composability** — where `milestone-driver:setup` and `milestone-feeder:setup` are installed, call them for the config/label slices they own rather than duplicating; the bootstrapper wraps them with the understanding interview, branch model, protection, and CI.
 - **Plugin scaffold** — its own `.claude-plugin/plugin.json` + `marketplace.json`, the `superpowers` dependency if needed, repo hygiene.
 - **`apply` / `update` orchestration + idempotency** — execute in a safe order; `update` reconciles a changed plan onto an existing repo, and re-runs never clobber human-edited docs or configs.

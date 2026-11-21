@@ -1,21 +1,23 @@
 #!/usr/bin/env pwsh
 #
 # emit-ci-workflow.ps1 — emit the target repo's `.github/workflows/ci.yml`: the
-# GitHub Actions workflow that gates PRs into the integration branch on the
-# project's detected test/preflight commands.
+# GitHub Actions workflow that gates PRs into the integration and protected
+# branches on the project's detected test/preflight commands.
 #
 # What this does, in plain terms:
 #   The bootstrapper's `apply` skill makes the TARGET repo suite-ready (Job 2
 #   "CI workflow", BRIEF.md:51). The last consequential write is the CI workflow,
-#   because branch protection (#12) registers this workflow's job names as the
-#   required status checks and `milestone-driver`'s per-PR merge gate (#13) waits
-#   on them. This is the deterministic, reusable writer `apply` calls to produce
-#   that file. The PowerShell 7+ twin of emit-ci-workflow.sh (suite cross-platform
-#   convention) — the two emit byte-identical YAML.
+#   because branch protection (#12) requires this workflow's job names as status
+#   checks only when `-Check` exits 0 (the file is the current generated one), and
+#   `milestone-driver`'s per-PR merge gate (#13) waits on them. This is the
+#   deterministic, reusable writer `apply` calls to produce that file. The
+#   PowerShell 7+ twin of emit-ci-workflow.sh (suite cross-platform convention) —
+#   the two emit byte-identical YAML.
 #
 #   It does NOT re-detect or re-decide anything: it CONSUMES the values #8 already
-#   resolved into `.milestone-config/driver.json` — the `integrationBranch` (PR
-#   target), the `unitTestCmd`, and the `preflightCmd`. GitHub Actions is the only
+#   resolved into `.milestone-config/driver.json` — the `integrationBranch` and
+#   `protectedBranch` (PR targets), the `unitTestCmd`, and the `preflightCmd`.
+#   GitHub Actions is the only
 #   CI provider in v1; non-GitHub providers are out of scope (BRIEF.md:76).
 #
 # Mirrors the sibling CI pattern EXACTLY (the single structural source of truth):
@@ -45,6 +47,8 @@
 #   -Repo <dir>   target repo root (default: current directory). The writer reads
 #                 <repo>/.milestone-config/driver.json and writes
 #                 <repo>/.github/workflows/ci.yml.
+#   -Check        write nothing: exit 0 when ci.yml matches the generated workflow,
+#                 exit 3 (with the diff on stdout) when it differs or is absent.
 #   Env fallback (param wins): CI_EMIT_REPO.
 #
 # Behavior (acceptance criteria, issue #11):
@@ -56,6 +60,9 @@
 #     but the run step is a `[TBD]` placeholder that fails loudly, AND the missing
 #     command is flagged to the human on stderr with 🔴. A command is NEVER
 #     fabricated. If only one command is absent, only that job is `[TBD]`-flagged.
+#   - Branch filter: `integrationBranch`, then `protectedBranch` when recorded and
+#     different, so the required checks also report on PRs into the protected
+#     branch. An absent `protectedBranch` adds no entry and no flag.
 #   - Absent integrationBranch: the `pull_request` branch filter cannot be
 #     resolved. The branch is left as a flagged `[TBD]` (never a guessed branch),
 #     and the missing `integrationBranch` is flagged to the human with 🔴. The
@@ -74,11 +81,12 @@
 # Exit 0 = file is present and correct (incl. emitted-with-[TBD]-flags, and the
 #          no-op case). Exit 1 = bad input / unreadable-or-malformed driver.json.
 # Exit 2 = write/serialize failure. Exit 3 = existing file diverges (not clobbered;
-#          run `update` to reconcile).
+#          run `emit-ci-workflow -Check` to print the diff).
 
 [CmdletBinding()]
 param(
-    [string]$Repo
+    [string]$Repo,
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -143,6 +151,7 @@ function Get-StringProp {
 }
 
 $IntegrationBranch = Get-StringProp $driver 'integrationBranch'
+$ProtectedBranch   = Get-StringProp $driver 'protectedBranch'
 $UnitTestCmd       = Get-StringProp $driver 'unitTestCmd'
 $PreflightCmd      = Get-StringProp $driver 'preflightCmd'
 
@@ -162,7 +171,11 @@ if ($IntegrationBranch -ne '') {
     $BranchFilter = $IntegrationBranch
 } else {
     $BranchFilter = '[TBD]'
-    $flags.Add("🔴 integrationBranch is absent from $DriverFile — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow will not gate any PR until the branch is set.")
+    if ($ProtectedBranch -ne '') {
+        $flags.Add("🔴 integrationBranch is absent from $DriverFile — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow runs only on PRs into the protected branch until the integration branch is set.")
+    } else {
+        $flags.Add("🔴 integrationBranch is absent from $DriverFile — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow will not gate any PR until the branch is set.")
+    }
 }
 
 # --- Resolve each command's run step (flag-don't-guess when absent) ------------
@@ -311,7 +324,10 @@ if ($SetupSteps -ne '') {
 # (which may contain ${{ }}, ':', '#', or other YAML-significant characters) is
 # always a valid, unambiguous scalar. Per YAML, a single-quote inside a
 # single-quoted scalar is escaped by doubling it (see ConvertTo-YamlSQuote above).
-$BranchFilterQ = ConvertTo-YamlSQuote $BranchFilter
+$BranchList = "'$(ConvertTo-YamlSQuote $BranchFilter)'"
+if ($ProtectedBranch -ne '' -and $ProtectedBranch -ne $BranchFilter) {
+    $BranchList = "$BranchList, '$(ConvertTo-YamlSQuote $ProtectedBranch)'"
+}
 $UnitRunQ      = ConvertTo-YamlSQuote $UnitRun
 $PreflightRunQ = ConvertTo-YamlSQuote $PreflightRun
 
@@ -321,7 +337,7 @@ $PreflightRunQ = ConvertTo-YamlSQuote $PreflightRun
 $NewContent = @"
 name: CI
 
-# CI gate for PRs into the integration branch. Emitted by milestone-bootstrapper
+# CI gate for PRs into the integration and protected branches. Emitted by milestone-bootstrapper
 # from .milestone-config/driver.json (output of #8) — do not hand-edit the command
 # steps or job names here; change them in driver.json and re-run apply/update.
 #
@@ -337,7 +353,7 @@ name: CI
 
 on:
   pull_request:
-    branches: ['$BranchFilterQ']
+    branches: [$BranchList]
 
 permissions:
   contents: read
@@ -392,16 +408,57 @@ function Write-Flags {
 # clobber (preserve human edits); flag the divergence and exit 3 so `apply`
 # surfaces it. Reconciling a changed plan onto an existing file is `update`'s
 # diff-first job, not this writer's (BRIEF.md:54,65).
+# -Check: report whether ci.yml is the current generated file, write nothing.
+# Prints no 🔴 flags (they describe a write). Absent or differing exits 3; the
+# diff is one hunk after trimming the common leading and trailing lines, built
+# the same way in awk in the .sh twin — no LCS, no `diff -u`.
+# A CRLF checkout of the generated file still matches, here and in the write path
+# below alike: both sides drop each line's trailing CR before the compare, as the
+# .sh twin's strip_cr does. The file is read as bytes because Get-Content -Raw
+# drops a leading UTF-8 BOM that the .sh twin keeps; a BOM-prefixed file differs
+# in both.
+function Get-WorkflowText {
+    $bytes = Get-Content -LiteralPath $WorkflowFile -AsByteStream -Raw
+    if ($null -eq $bytes) { return '' }
+    return ([System.Text.Encoding]::UTF8.GetString($bytes) -replace "`r(?=`n|\z)", '').TrimEnd("`n")
+}
+$newText = ($NewContent -replace "`r(?=`n|\z)", '').TrimEnd("`n")
+if ($Check) {
+    if (-not (Test-Path -LiteralPath $WorkflowFile -PathType Leaf)) {
+        Write-Output "$WorkflowFile not found."
+        exit 3
+    }
+    $curText = Get-WorkflowText
+    # Ordinal compares throughout: -ceq is culture-aware and treats a BOM (U+FEFF)
+    # as ignorable, so a BOM-prefixed file would "match".
+    if ([string]::Equals($curText, $newText)) {
+        Write-Output "$WorkflowFile matches the generated CI workflow."
+        exit 0
+    }
+    $c = if ($curText -eq '') { @() } else { @($curText -split "`n") }
+    $w = if ($newText -eq '') { @() } else { @($newText -split "`n") }
+    $nc = $c.Count; $nn = $w.Count
+    $p = 0; while ($p -lt $nc -and $p -lt $nn -and [string]::Equals($c[$p], $w[$p])) { $p++ }
+    $s = 0; while ($s -lt ($nc - $p) -and $s -lt ($nn - $p) -and [string]::Equals($c[$nc - 1 - $s], $w[$nn - 1 - $s])) { $s++ }
+    $nd = $nc - $p - $s; $na = $nn - $p - $s
+    Write-Output '--- .github/workflows/ci.yml (current)'
+    Write-Output '+++ .github/workflows/ci.yml (generated)'
+    $curStart = if ($nd -eq 0) { $p } else { $p + 1 }
+    $newStart = if ($na -eq 0) { $p } else { $p + 1 }
+    Write-Output ('@@ -{0},{1} +{2},{3} @@' -f $curStart, $nd, $newStart, $na)
+    for ($i = $p; $i -lt $p + $nd; $i++) { Write-Output ('-' + $c[$i]) }
+    for ($i = $p; $i -lt $p + $na; $i++) { Write-Output ('+' + $w[$i]) }
+    exit 3
+}
+
 if (Test-Path -LiteralPath $WorkflowFile -PathType Leaf) {
-    $existing = Get-Content -LiteralPath $WorkflowFile -Raw
-    if ($null -eq $existing) { $existing = '' }
-    if ($existing.TrimEnd("`r", "`n") -eq $NewContent.TrimEnd("`r", "`n")) {
+    if ([string]::Equals((Get-WorkflowText), $newText)) {
         Write-Output "$WorkflowFile already up to date (no change)."
         Write-Flags
         exit 0
     }
     [Console]::Error.WriteLine("ERROR: $WorkflowFile already exists and differs from the plan's CI workflow.")
-    [Console]::Error.WriteLine("       Not overwriting — human edits are preserved. Run 'update' to review the diff and reconcile.")
+    [Console]::Error.WriteLine("       Not overwriting — human edits are preserved. Run 'emit-ci-workflow -Check' to print the diff.")
     exit 3
 }
 

@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 #
 # emit-ci-workflow.sh — emit the target repo's `.github/workflows/ci.yml`: the
-# GitHub Actions workflow that gates PRs into the integration branch on the
-# project's detected test/preflight commands.
+# GitHub Actions workflow that gates PRs into the integration and protected
+# branches on the project's detected test/preflight commands.
 #
 # What this does, in plain terms:
 #   The bootstrapper's `apply` skill makes the TARGET repo suite-ready (Job 2
 #   "CI workflow", BRIEF.md:51). The last consequential write is the CI workflow,
-#   because branch protection (#12) registers this workflow's job names as the
-#   required status checks and `milestone-driver`'s per-PR merge gate (#13) waits
-#   on them. This is the deterministic, reusable writer `apply` calls to produce
-#   that file. The PowerShell 7+ twin is emit-ci-workflow.ps1 (suite cross-
-#   platform convention) — the two emit byte-identical YAML.
+#   because branch protection (#12) requires this workflow's job names as status
+#   checks only when `--check` exits 0 (the file is the current generated one), and
+#   `milestone-driver`'s per-PR merge gate (#13) waits on them. This is the
+#   deterministic, reusable writer `apply` calls to produce that file. The
+#   PowerShell 7+ twin is emit-ci-workflow.ps1 (suite cross-platform convention) —
+#   the two emit byte-identical YAML.
 #
 #   It does NOT re-detect or re-decide anything: it CONSUMES the values #8 already
-#   resolved into `.milestone-config/driver.json` — the `integrationBranch` (PR
-#   target), the `unitTestCmd`, and the `preflightCmd`. GitHub Actions is the only
+#   resolved into `.milestone-config/driver.json` — the `integrationBranch` and
+#   `protectedBranch` (PR targets), the `unitTestCmd`, and the `preflightCmd`.
+#   GitHub Actions is the only
 #   CI provider in v1; non-GitHub providers are out of scope (BRIEF.md:76).
 #
 # Mirrors the sibling CI pattern EXACTLY (the single structural source of truth):
@@ -45,6 +47,8 @@
 #   --repo <dir>   target repo root (default: current directory). The writer reads
 #                  <repo>/.milestone-config/driver.json and writes
 #                  <repo>/.github/workflows/ci.yml.
+#   --check        write nothing: exit 0 when ci.yml matches the generated workflow,
+#                  exit 3 (with the diff on stdout) when it differs or is absent.
 #   Env fallback (arg wins): CI_EMIT_REPO.
 #
 # Behavior (acceptance criteria, issue #11):
@@ -56,6 +60,9 @@
 #     but the run step is a `[TBD]` placeholder that fails loudly, AND the missing
 #     command is flagged to the human on stderr with 🔴. A command is NEVER
 #     fabricated. If only one command is absent, only that job is `[TBD]`-flagged.
+#   - Branch filter: `integrationBranch`, then `protectedBranch` when recorded and
+#     different, so the required checks also report on PRs into the protected
+#     branch. An absent `protectedBranch` adds no entry and no flag.
 #   - Absent integrationBranch: the `pull_request` branch filter cannot be
 #     resolved. The branch is left as a flagged `[TBD]` (never a guessed branch),
 #     and the missing `integrationBranch` is flagged to the human with 🔴. The
@@ -74,7 +81,7 @@
 # Exit 0 = file is present and correct (incl. emitted-with-[TBD]-flags, and the
 #          no-op case). Exit 1 = bad input / unreadable-or-malformed driver.json.
 # Exit 2 = write/serialize failure. Exit 3 = existing file diverges (not clobbered;
-#          run `update` to reconcile).
+#          run `emit-ci-workflow --check` to print the diff).
 
 set -euo pipefail
 
@@ -90,7 +97,8 @@ readonly PREFLIGHT_CONTEXT="preflight"
 # Here the damage is LATENT, not live — but the blast radius is the worst in the
 # suite, because these jq values are not just USED, they are EMBEDDED IN AN
 # EMITTED ARTIFACT:
-#   - `INTEGRATION_BRANCH` becomes `BRANCH_FILTER`, which is written into the
+#   - `INTEGRATION_BRANCH` becomes `BRANCH_FILTER` (and `PROTECTED_BRANCH` the
+#     second entry), which is written into the
 #     workflow's `on: pull_request: branches:` filter. A CR'd value emits a
 #     branch filter that matches NOTHING, so CI never triggers on any PR — while
 #     the file stays valid YAML, this writer still exits 0, and branch protection
@@ -102,7 +110,7 @@ readonly PREFLIGHT_CONTEXT="preflight"
 #   - `STACK` drives setup-step selection by string compare (a CR'd value matches
 #     no branch -> the setup step silently vanishes); `STACK_VERSION_FILE` is
 #     emitted as a path.
-# All five are consumed as TEXT, so all five go through this one seam. On a POSIX
+# All six are consumed as TEXT, so all six go through this one seam. On a POSIX
 # jq (LF stdout) the seam is a no-op, so applying it unconditionally is safe: the
 # emitted YAML is BYTE-IDENTICAL on any input that was not already CR-damaged
 # (verified with `cmp` when this landed).
@@ -115,10 +123,12 @@ strip_cr() { sed $'s/\r$//'; }
 
 # --- Inputs (arg overrides env; env overrides default) -------------------------
 REPO="${CI_EMIT_REPO:-.}"
+CHECK=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo) REPO="${2:?--repo needs a value}"; shift 2 ;;
+    --check) CHECK=1; shift ;;
     -h|--help)
       grep -E '^# ' "$0" | sed -E 's/^# ?//'
       exit 0 ;;
@@ -162,6 +172,7 @@ fi
 # an absent key is indistinguishable from "" here — both mean "not recorded",
 # which is exactly the [TBD]-flag trigger below.
 INTEGRATION_BRANCH="$(printf '%s' "$DRIVER_JSON" | jq -r '.integrationBranch // "" | if type=="string" then . else "" end' | strip_cr)"
+PROTECTED_BRANCH="$(printf '%s' "$DRIVER_JSON"   | jq -r '.protectedBranch   // "" | if type=="string" then . else "" end' | strip_cr)"
 UNIT_TEST_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.unitTestCmd       // "" | if type=="string" then . else "" end' | strip_cr)"
 PREFLIGHT_CMD="$(printf '%s' "$DRIVER_JSON"      | jq -r '.preflightCmd      // "" | if type=="string" then . else "" end' | strip_cr)"
 
@@ -181,7 +192,11 @@ if [ -n "$INTEGRATION_BRANCH" ]; then
   BRANCH_FILTER="$INTEGRATION_BRANCH"
 else
   BRANCH_FILTER="[TBD]"
-  FLAGS+=("🔴 integrationBranch is absent from ${DRIVER_FILE} — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow will not gate any PR until the branch is set.")
+  if [ -n "$PROTECTED_BRANCH" ]; then
+    FLAGS+=("🔴 integrationBranch is absent from ${DRIVER_FILE} — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow runs only on PRs into the protected branch until the integration branch is set.")
+  else
+    FLAGS+=("🔴 integrationBranch is absent from ${DRIVER_FILE} — the pull_request branch filter is left as [TBD]. Record it (re-run #8) and re-emit; the workflow will not gate any PR until the branch is set.")
+  fi
 fi
 
 # --- Resolve each command's run step (flag-don't-guess when absent) ------------
@@ -337,14 +352,17 @@ fi
 # (which may contain ${{ }}, ':', '#', or other YAML-significant characters) is
 # always a valid, unambiguous scalar. Per YAML, a single-quote inside a
 # single-quoted scalar is escaped by doubling it (see yaml_squote, defined above).
-BRANCH_FILTER_Q="$(yaml_squote "$BRANCH_FILTER")"
+BRANCH_LIST="'$(yaml_squote "$BRANCH_FILTER")'"
+if [ -n "$PROTECTED_BRANCH" ] && [ "$PROTECTED_BRANCH" != "$BRANCH_FILTER" ]; then
+  BRANCH_LIST="${BRANCH_LIST}, '$(yaml_squote "$PROTECTED_BRANCH")'"
+fi
 UNIT_RUN_Q="$(yaml_squote "$UNIT_RUN")"
 PREFLIGHT_RUN_Q="$(yaml_squote "$PREFLIGHT_RUN")"
 
 NEW_CONTENT="$(cat <<EOF
 name: CI
 
-# CI gate for PRs into the integration branch. Emitted by milestone-bootstrapper
+# CI gate for PRs into the integration and protected branches. Emitted by milestone-bootstrapper
 # from .milestone-config/driver.json (output of #8) — do not hand-edit the command
 # steps or job names here; change them in driver.json and re-run apply/update.
 #
@@ -360,7 +378,7 @@ name: CI
 
 on:
   pull_request:
-    branches: ['${BRANCH_FILTER_Q}']
+    branches: [${BRANCH_LIST}]
 
 permissions:
   contents: read
@@ -417,14 +435,50 @@ emit_flags() {  # print any accumulated 🔴 flags to stderr (never silent)
   done
 }
 
+# --check: report whether ci.yml is the current generated file, write nothing.
+# Prints no 🔴 flags (they describe a write). Absent or differing exits 3; the
+# diff is one hunk after trimming the common leading and trailing lines, built
+# the same way in awk (ENVIRON) here and in pwsh in the .ps1 twin — no LCS, no
+# `diff -u` (no pwsh twin, timestamped headers).
+# A CRLF checkout of the generated file still matches, here and in the write path
+# below alike: both sides drop each line's trailing CR before the compare, as the
+# .ps1 twin does. A leading UTF-8 BOM is kept, so a BOM-prefixed file differs.
+NEW_TEXT="$(printf '%s' "$NEW_CONTENT" | strip_cr)"
+if [ "$CHECK" -eq 1 ]; then
+  if [ ! -f "$WORKFLOW_FILE" ]; then
+    echo "${WORKFLOW_FILE} not found."
+    exit 3
+  fi
+  CURRENT_CONTENT="$(strip_cr < "$WORKFLOW_FILE")"
+  if [ "$CURRENT_CONTENT" = "$NEW_TEXT" ]; then
+    echo "${WORKFLOW_FILE} matches the generated CI workflow."
+    exit 0
+  fi
+  # LC_ALL=C: awk string == may use collation, which ignores a BOM (U+FEFF) and
+  # would print an empty hunk; bytes compare like the .ps1 twin's ordinal compare.
+  CUR="$CURRENT_CONTENT" NEW="$NEW_TEXT" LC_ALL=C awk '
+    BEGIN {
+      nc = split(ENVIRON["CUR"], c, "\n"); nn = split(ENVIRON["NEW"], w, "\n")
+      p = 0; while (p < nc && p < nn && c[p+1] == w[p+1]) p++
+      s = 0; while (s < nc - p && s < nn - p && c[nc-s] == w[nn-s]) s++
+      nd = nc - p - s; na = nn - p - s
+      print "--- .github/workflows/ci.yml (current)"
+      print "+++ .github/workflows/ci.yml (generated)"
+      printf "@@ -%d,%d +%d,%d @@\n", (nd ? p+1 : p), nd, (na ? p+1 : p), na
+      for (i = p+1; i <= p+nd; i++) print "-" c[i]
+      for (i = p+1; i <= p+na; i++) print "+" w[i]
+    }'
+  exit 3
+fi
+
 if [ -f "$WORKFLOW_FILE" ]; then
-  if [ "$(cat "$WORKFLOW_FILE")" = "$NEW_CONTENT" ]; then
+  if [ "$(strip_cr < "$WORKFLOW_FILE")" = "$NEW_TEXT" ]; then
     echo "${WORKFLOW_FILE} already up to date (no change)."
     emit_flags
     exit 0
   fi
   echo "ERROR: ${WORKFLOW_FILE} already exists and differs from the plan's CI workflow." >&2
-  echo "       Not overwriting — human edits are preserved. Run 'update' to review the diff and reconcile." >&2
+  echo "       Not overwriting — human edits are preserved. Run 'emit-ci-workflow --check' to print the diff." >&2
   exit 3
 fi
 

@@ -7,8 +7,8 @@
 #   carries the suite's server-side safety floor, so the milestone-driver gates
 #   hold even when a local hook is bypassed or absent. It asserts, via the GitHub
 #   API, that on the target branch: direct pushes are blocked, a pull request is
-#   required before merge, and the CI status checks #11 emits ('unit-tests' and
-#   'preflight') must pass. Re-asserting the same protection is a safe no-op, so
+#   required before merge, and, when ci.yml is the current generated file, the
+#   CI checks 'unit-tests' and 'preflight' must pass. Re-asserting the same protection is a safe no-op, so
 #   `apply` and `update` may run it repeatedly. It NEVER weakens or removes
 #   protection it did not author — it GETs the existing protection first and
 #   merges the floor in per field, taking the STRONGER value, so a re-apply onto
@@ -51,9 +51,10 @@
 #       MAX(existing, 0). The floor REQUIRES a PR before merge but imposes no
 #       human-approval gate (floor 0); an existing 2-approval rule is NOT lowered
 #       (a review requirement is optional and is not imposed; BRIEF.md:50).
-#   - required_status_checks.contexts = UNION(existing contexts, the #11 CI job
-#       names 'unit-tests'/'preflight') — the floor contexts are added, any
-#       existing extra contexts are kept. strict = (existing.strict OR false) =
+#   - required_status_checks.contexts = UNION(existing contexts, 'unit-tests'/
+#       'preflight' when ci.yml is the current generated file, else nothing) — any
+#       existing extra contexts are kept; with none existing and none added the
+#       field is null. strict = (existing.strict OR false) =
 #       existing is preserved (the floor never turns OFF require-up-to-date).
 #   - enforce_admins = the FLOOR'S value: true for `--floor release` (existing
 #       cannot exceed true — admins cannot bypass, the key hardening signal);
@@ -68,12 +69,13 @@
 #       repo with no allowlist this is null.
 #
 # The required status-check contexts are SOURCED, never guessed:
-#   the contexts are the stable job names #11 registers. They are read from the
-#   emitted .github/workflows/ci.yml when present; absent that file, the canonical
-#   contract names ('unit-tests' / 'preflight') are used — the exact strings #11's
-#   emit-ci-workflow.sh hard-codes (emit-ci-workflow.sh:84-85,214-224) and shares
-#   with #12 as a contract. If neither source yields any context, this fails with
-#   a clear message rather than registering an empty or guessed context.
+#   only the checks the plugin generates are required. This asks
+#   `emit-ci-workflow --check` whether ci.yml is the current generated file; on
+#   exit 0 'unit-tests' and 'preflight' are required (the exact job names the
+#   emitter writes, which run on PRs into both branches). On exit 3 (hand-written,
+#   outdated generated, or no ci.yml) no check is added: existing required checks
+#   are kept and listed with 🔴, and none are ever removed. Any other exit fails
+#   with the emitter's error and changes no protection.
 #
 # The protection target is SOURCED, never chosen:
 #   `--floor release` reads `protectedBranch`; `--floor integration` reads
@@ -122,9 +124,11 @@
 # Exit 0 = protection asserted / already correct (or previewed) — or the
 #          integration floor was not opted in (reported no-op, nothing changed).
 # Exit 1 = precondition unmet / config missing / unknown --floor or
-#          integrationProtection value / repo-admin scope absent / branch or CI
-#          contexts missing / integration floor REFUSED on an enforce_admins:true
-#          branch (nothing changed).
+#          integrationProtection value / repo-admin scope absent / branch
+#          missing / emit-ci-workflow --check failed (exit 1 or 2) /
+#          integration floor REFUSED on an enforce_admins:true branch
+#          (nothing changed). A missing ci.yml is not an exit 1: no checks are
+#          added, a 🔴 line says why, and the run continues.
 # Exit 2 = GitHub API failure mid-step (reports the failing endpoint; nothing weakened).
 
 set -euo pipefail
@@ -187,6 +191,8 @@ set -euo pipefail
 # --input -`. Folding is safe for the PUT: `s/\r$//` removes only a CR that
 # precedes the LF sed splits on, and that CR is insignificant JSON whitespace.
 strip_cr() { sed $'s/\r$//'; }
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 REPO="."
 DRY_RUN=0
@@ -306,43 +312,39 @@ else
   NOOP_ADMINS_SUFFIX="; ${ADMINS_NOTE}"
 fi
 
-# --- Resolve the required status-check contexts (#11's CI job names) ----------
-# Sourced, never guessed. Prefer the emitted ci.yml's job names; absent that file,
-# fall back to the contract names #11 hard-codes. Either way the contexts are the
-# stable strings #11/#12 share — never an empty or invented context.
-#
-# ci.yml is emitted by emit-ci-workflow.sh, which ALWAYS writes both the
-# 'unit-tests' and 'preflight' jobs (a missing command becomes a [TBD] step that
-# fails loudly; the job name — and thus the context — never drifts). So the job
-# keys under `jobs:` are the authoritative contexts when the file exists.
-CANONICAL_CONTEXTS=("unit-tests" "preflight")
+# --- Resolve the required status-check contexts (asked of the generator) ------
+# Only the checks the plugin generates are required: it knows their names and that
+# they run on PRs into both branches. Hand-written CI cannot be known to report
+# (shared workflows, summary jobs and matrix jobs change what GitHub reports), so
+# this asks the sibling emitter whether ci.yml is the current generated file.
+# Exit 0 -> 'unit-tests' and 'preflight' are required. Exit 3 (hand-written,
+# outdated generated, or no ci.yml) -> no checks are added; existing required
+# checks are kept by the merge below, never removed. Any other exit -> fail.
 CI_WORKFLOW="${REPO%/}/.github/workflows/ci.yml"
 
 CONTEXTS=()
-if [ -f "$CI_WORKFLOW" ]; then
-  # Read the keys directly under the top-level `jobs:` mapping. The emitter writes
-  # each job as a 2-space-indented `<name>:` line inside the `jobs:` block; parse
-  # exactly that shape (no yq dependency) and stop at the next top-level key.
-  while IFS= read -r ctx; do
-    [ -n "$ctx" ] && CONTEXTS+=("$ctx")
-  done < <(
-    awk '
-      /^jobs:[[:space:]]*$/ { injobs=1; next }
-      injobs && /^[^[:space:]]/ { injobs=0 }
-      injobs && /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ {
-        line=$0
-        sub(/^  /, "", line)
-        sub(/:[[:space:]]*$/, "", line)
-        print line
-      }
-    ' "$CI_WORKFLOW"
-  )
-  [ "${#CONTEXTS[@]}" -gt 0 ] \
-    || fail "🔴 found ${CI_WORKFLOW} but could not read any CI job name from its 'jobs:' block. The required status-check context is the #11 CI job name; re-emit the CI workflow (issue #11) and re-run rather than guessing a context. No protection changed."
-else
-  # No emitted workflow yet: use the contract names #11/#12 share verbatim.
-  CONTEXTS=("${CANONICAL_CONTEXTS[@]}")
-fi
+ADDS_CHECKS=0
+CI_CAUSE=""
+CHECK_ERR="$(bash "${SCRIPT_DIR}/emit-ci-workflow.sh" --repo "$REPO" --check 2>&1 >/dev/null)" && CHECK_RC=0 || CHECK_RC=$?
+case "$CHECK_RC" in
+  0)
+    CONTEXTS=("unit-tests" "preflight")
+    ADDS_CHECKS=1 ;;
+  3)
+    if [ ! -f "$CI_WORKFLOW" ]; then
+      CI_CAUSE="absent"
+    elif grep -q 'Emitted by milestone-bootstrapper' "$CI_WORKFLOW"; then
+      CI_CAUSE="outdated generated"
+    else
+      CI_CAUSE="hand-written"
+    fi ;;
+  *)
+    # Exit 1/2 (bad driver.json, unwritable path) or a missing emitter is not a
+    # verdict on ci.yml, so it must not read as hand-written CI.
+    echo "milestone-bootstrapper: 🔴 emit-ci-workflow --check failed (exit ${CHECK_RC}); no protection changed." >&2
+    [ -z "$CHECK_ERR" ] || printf '%s\n' "$CHECK_ERR" >&2
+    exit 1 ;;
+esac
 
 # --- Resolve owner/repo once (all protection ops are keyed on it) -------------
 SLUG="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null)" \
@@ -400,8 +402,8 @@ fi
 # enforce_admins, required_pull_request_reviews, restrictions. The PUT uses bare
 # booleans (the GET response wraps them as {"enabled": ...}); the merge reads the
 # wrapped GET shape and emits this flat plan shape. Per field, STRONGER wins:
-#   - required_status_checks.contexts = UNION(existing, <#11 job names>)  (add the
-#       floor contexts, keep existing extras); strict = existing OR false (preserve
+#   - required_status_checks.contexts = UNION(existing, generated job names)  (add
+#       them only when generated, keep existing extras); strict = existing OR false (preserve
 #       an existing require-up-to-date, never turn it off).
 #   - required_pull_request_reviews.required_approving_review_count = MAX(existing,
 #       0)  (PR required; never lower an existing approval requirement).
@@ -412,12 +414,20 @@ fi
 #       logins / team slugs / app slugs), PRESERVED; null only when none exists.
 # This jq program is shared byte-for-byte with provision-protection.ps1, so both
 # emit an identical PUT body from identical inputs.
-CONTEXTS_JSON="$(printf '%s\n' "${CONTEXTS[@]}" | jq -R . | jq -s .)"
+if [ "$ADDS_CHECKS" -eq 1 ]; then
+  CONTEXTS_JSON="$(printf '%s\n' "${CONTEXTS[@]}" | jq -R . | jq -s .)"
+else
+  CONTEXTS_JSON='[]'
+fi
 MERGE_FILTER='. as $cur | {
-  required_status_checks: {
-    strict: (($cur.required_status_checks.strict) // false),
-    contexts: ((($cur.required_status_checks.contexts) // []) + $contexts | unique)
-  },
+  required_status_checks: (
+    if ($cur.required_status_checks) == null and ($contexts | length) == 0 then null
+    else {
+      strict: (($cur.required_status_checks.strict) // false),
+      contexts: ((($cur.required_status_checks.contexts) // []) + $contexts | unique)
+    }
+    end
+  ),
   enforce_admins: $enforceAdmins,
   required_pull_request_reviews: {
     required_approving_review_count: ([ (($cur.required_pull_request_reviews.required_approving_review_count) // 0), 0 ] | max)
@@ -436,25 +446,29 @@ MERGE_FILTER='. as $cur | {
 }'
 PUT_BODY="$(printf '%s' "$CURRENT" | jq --argjson contexts "$CONTEXTS_JSON" --argjson enforceAdmins "$ENFORCE_ADMINS" "$MERGE_FILTER" | strip_cr)"
 
-# Normalize the existing protection into the same flat PUT shape (no floor added,
-# no UNION/MAX) so an exact match against the merged target means "already at or
-# above the floor" — a true no-op. The two filters differ ONLY in that the merge
-# unions the floor contexts and floors the approval count; when the existing
-# state already meets the floor, that addition is empty and the shapes are equal.
-# enforce_admins is emitted as the FLOOR'S value here (structurally hardcoded, not
-# read from $cur, exactly as before) — substituting the same $enforceAdmins keeps
-# release semantics byte-identical while making the integration comparison
-# meaningful: the only enforce_admins state that reaches this line at the
-# integration floor is `false`, since `true` already refused above.
+# Normalize the existing protection into the same flat PUT shape, every field read
+# from $cur as it is (absent -> null or false, no floor value filled in), so an
+# exact match against the merged target means "already at or above the floor" — a
+# true no-op. Filling a floor value in here would hide a missing PR rule, an
+# allowed force push or deletion, or a 404 (no protection at all) whenever the
+# merge adds no checks, and the PUT would be skipped.
 NORMALIZE_FILTER='. as $cur | {
-  required_status_checks: {
-    strict: (($cur.required_status_checks.strict) // false),
-    contexts: ((($cur.required_status_checks.contexts) // []) | unique)
-  },
-  enforce_admins: $enforceAdmins,
-  required_pull_request_reviews: {
-    required_approving_review_count: (($cur.required_pull_request_reviews.required_approving_review_count) // 0)
-  },
+  required_status_checks: (
+    if ($cur.required_status_checks) == null then null
+    else {
+      strict: (($cur.required_status_checks.strict) // false),
+      contexts: ((($cur.required_status_checks.contexts) // []) | unique)
+    }
+    end
+  ),
+  enforce_admins: (($cur.enforce_admins.enabled) // false),
+  required_pull_request_reviews: (
+    if ($cur.required_pull_request_reviews) == null then null
+    else {
+      required_approving_review_count: (($cur.required_pull_request_reviews.required_approving_review_count) // 0)
+    }
+    end
+  ),
   restrictions: (
     if ($cur.restrictions) == null then null
     else {
@@ -464,12 +478,37 @@ NORMALIZE_FILTER='. as $cur | {
     }
     end
   ),
-  allow_force_pushes: false,
-  allow_deletions: false
+  allow_force_pushes: (($cur.allow_force_pushes.enabled) // false),
+  allow_deletions: (($cur.allow_deletions.enabled) // false)
 }'
 
 # The contexts the merged PUT actually carries (UNION result), for display.
-CONTEXTS_DISPLAY="$(printf '%s' "$PUT_BODY" | jq -r '.required_status_checks.contexts | join(", ")' | strip_cr)"
+CONTEXTS_DISPLAY="$(printf '%s' "$PUT_BODY" | jq -r '(.required_status_checks.contexts // []) | if length == 0 then "none" else join(", ") end' | strip_cr)"
+
+# --- Say so when no checks are added (stderr; exit status unchanged) -----------
+# Existing required checks are kept by the merge, so list them for the human to
+# confirm each one reports on PRs into this branch.
+if [ "$ADDS_CHECKS" -eq 0 ]; then
+  case "$CI_CAUSE" in
+    absent)
+      CI_NOTE=".github/workflows/ci.yml is absent. Run update (or apply) to create it."
+      CI_DESC="a missing ci.yml" ;;
+    "outdated generated")
+      CI_NOTE=".github/workflows/ci.yml is an outdated generated file. Review the diff with emit-ci-workflow --check, then delete it and re-run update (or apply), which recreates it; local edits to it are lost."
+      CI_DESC="an outdated generated ci.yml" ;;
+    *)
+      CI_NOTE=".github/workflows/ci.yml is hand-written. Run emit-ci-workflow --check to print the diff."
+      CI_DESC="hand-written CI" ;;
+  esac
+  echo "milestone-bootstrapper: 🔴 no required checks added: ${CI_NOTE}" >&2
+  EXISTING_CONTEXTS="$(printf '%s' "$CURRENT" | jq -r '(.required_status_checks.contexts // [])[]' | strip_cr)"
+  if [ -n "$EXISTING_CONTEXTS" ]; then
+    echo "🔴 milestone-bootstrapper does not manage required checks for ${CI_DESC}. Confirm each of these reports on PRs into \`${TARGET_BRANCH}\`. To remove one: \`gh api -X DELETE repos/${SLUG}/branches/${TARGET_BRANCH}/protection/required_status_checks/contexts -f 'contexts[]=<name>'\`" >&2
+    while IFS= read -r ctx; do
+      echo "  ${ctx}" >&2
+    done <<< "$EXISTING_CONTEXTS"
+  fi
+fi
 
 # --- Preview (--dry-run): print the exact MERGED PUT body; write nothing ------
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -485,7 +524,7 @@ fi
 # merge added nothing — the repo is already at or above the floor, so writing
 # would be a pointless re-PUT. (On a fresh repo CURRENT is 'null', so the
 # normalized existing differs from the floor target and we proceed to write.)
-NORM_CURRENT="$(printf '%s' "$CURRENT" | jq --argjson enforceAdmins "$ENFORCE_ADMINS" "$NORMALIZE_FILTER" | strip_cr)"
+NORM_CURRENT="$(printf '%s' "$CURRENT" | jq "$NORMALIZE_FILTER" | strip_cr)"
 if [ "$NORM_CURRENT" = "$PUT_BODY" ]; then
   echo "milestone-bootstrapper: branch protection already meets the suite floor on ${SLUG} branch '${TARGET_BRANCH}' (no change)."
   echo "milestone-bootstrapper: required status checks: ${CONTEXTS_DISPLAY}${NOOP_ADMINS_SUFFIX}."
@@ -509,19 +548,24 @@ put_protection() {
 }
 
 # read_back_protection — the pre-existing acceptance check (same pattern): GETs
-# current protection and confirms all three floors (PR required, enforce_admins,
-# status-check contexts present). enforce_admins is asserted EQUAL TO THE FLOOR'S
+# current protection and confirms the floors (PR required, enforce_admins, force
+# pushes and deletions disallowed, and status-check contexts present only when
+# this run added the generated checks). enforce_admins is asserted EQUAL TO THE FLOOR'S
 # value ($ENFORCE_ADMINS) rather than hardcoded "true", so release still verifies
 # `true` and integration verifies the `false` it just wrote — an assertion that
 # would otherwise fail on every integration run. Populates PR_REQUIRED/
-# ADMINS_ENFORCED/HAS_CONTEXTS for the caller's message; returns non-zero on a
+# ADMINS_ENFORCED/FORCE_PUSHES/DELETIONS/HAS_CONTEXTS for the caller's message; returns non-zero on a
 # failed GET or a floor not holding.
 read_back_protection() {
   VERIFY="$(gh api "repos/${SLUG}/branches/${TARGET_BRANCH}/protection" 2>/dev/null)" || return 1
   PR_REQUIRED="$(printf '%s' "$VERIFY" | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end' | strip_cr)"
   ADMINS_ENFORCED="$(printf '%s' "$VERIFY" | jq -r '.enforce_admins.enabled // false' | strip_cr)"
+  FORCE_PUSHES="$(printf '%s' "$VERIFY" | jq -r '.allow_force_pushes.enabled // false' | strip_cr)"
+  DELETIONS="$(printf '%s' "$VERIFY" | jq -r '.allow_deletions.enabled // false' | strip_cr)"
   HAS_CONTEXTS="$(printf '%s' "$VERIFY" | jq -r '(.required_status_checks.contexts // []) | length' | strip_cr)"
-  [ "$PR_REQUIRED" = "yes" ] && [ "$ADMINS_ENFORCED" = "$ENFORCE_ADMINS" ] && [ "${HAS_CONTEXTS:-0}" -ne 0 ]
+  [ "$PR_REQUIRED" = "yes" ] && [ "$ADMINS_ENFORCED" = "$ENFORCE_ADMINS" ] \
+    && [ "$FORCE_PUSHES" = "false" ] && [ "$DELETIONS" = "false" ] || return 1
+  [ "$ADDS_CHECKS" -eq 0 ] || [ "${HAS_CONTEXTS:-0}" -ne 0 ]
 }
 
 put_protection \
@@ -538,7 +582,7 @@ if ! read_back_protection; then
   put_protection \
     || api_fail "retry failed: could not re-assert branch protection on '${SLUG}' branch '${TARGET_BRANCH}' (PUT repos/${SLUG}/branches/${TARGET_BRANCH}/protection). No protection was weakened or removed. Re-run after resolving the error."
   read_back_protection \
-    || api_fail "asserted protection but the read-back still does not show all three floors after one retry (PR required=${PR_REQUIRED:-unknown}, enforce_admins=${ADMINS_ENFORCED:-unknown}, status-check contexts=${HAS_CONTEXTS:-unknown}) on '${TARGET_BRANCH}'. Re-run to confirm."
+    || api_fail "asserted protection but the read-back still does not show the floors after one retry (PR required=${PR_REQUIRED:-unknown}, enforce_admins=${ADMINS_ENFORCED:-unknown}, allow_force_pushes=${FORCE_PUSHES:-unknown}, allow_deletions=${DELETIONS:-unknown}, status-check contexts=${HAS_CONTEXTS:-unknown}) on '${TARGET_BRANCH}'. Re-run to confirm."
 fi
 
 echo "milestone-bootstrapper: branch protection asserted on ${SLUG} branch '${TARGET_BRANCH}'."

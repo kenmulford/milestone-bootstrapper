@@ -162,7 +162,7 @@ Reconcile the integration + protected branches (create-if-missing) and default-b
 
 #### Step 4 (5) — CI workflow (before protection) — ADD/PATCH non-destructively
 
-Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into the integration branch. **CI is reconciled strictly before protection** — its job names are the required status-check contexts (`BRIEF.md:90`; `scripts/emit-ci-workflow.sh` CONTEXT-NAME STABILITY CONTRACT). Non-destructive: absent → created, byte-identical → no-op, differs → not clobbered (exit 3, flagged 🔴):
+Re-assert `.github/workflows/ci.yml` running the recorded test/preflight commands on PRs into both branches. **CI is reconciled strictly before protection**, which requires its job names only on `emit-ci-workflow --check` exit 0 (`BRIEF.md:90`). Absent → created, identical → no-op, differs → not clobbered (exit 3, flagged 🔴, run continues to Step 4 (6)):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/emit-ci-workflow.sh" --repo "<repo>"

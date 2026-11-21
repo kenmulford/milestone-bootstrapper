@@ -9,7 +9,7 @@ Invoked from [`../SKILL.md`](../SKILL.md) Step 3, step (6) — run after CI. Ste
 | `protectedBranch` (release) | `release` — the default | **Always.** | `true` — release-grade; admins cannot bypass. |
 | `integrationBranch` | `integration` | **Only** when `driver.json` carries `integrationProtection: "floor"`. | `false` — admins may override. |
 
-Run the release target first, then the integration target when it applies. Both read the same CI contexts, so both must run after step (5).
+Run the release target first, then the integration target when it applies. Both ask `emit-ci-workflow --check`, so both must run after step (5).
 
 ### Target 1 — the protected branch (always)
 
@@ -40,7 +40,7 @@ Run the release target first, then the integration target when it applies. Both 
 
 ## Both targets
 
-- Reads its target branch from `driver.json` (step 2) — `protectedBranch` at the release floor, `integrationBranch` at the integration floor — and the required-status-check contexts from the `.github/workflows/ci.yml` emitted at step (5); that file must already exist, which is why this step is **last**.
-- Asserts the floor (no direct push, PR required, CI checks required, `enforce_admins` per floor, no force-push/deletions), **merging UP**: it GETs existing protection first and keeps the stronger value per field, so re-asserting is a safe idempotent no-op and a stronger-than-floor setting is preserved, never reconciled down (`scripts/provision-protection.sh` header). The integration floor is create-only or reconcile-UP for the same reason — it never downgrades, it refuses.
+- Reads its target branch from `driver.json` (step 2) — `protectedBranch` at the release floor, `integrationBranch` at the integration floor — and the required status checks from `emit-ci-workflow --check`, not from `ci.yml` job names: only exit 0 (the file is the current generated one from step (5)) adds `unit-tests`/`preflight`; exit 3 adds none and lists existing checks 🔴; any other exit fails with the emitter's error. CI runs first, which is why this step is **last**.
+- Asserts the floor (no direct push, PR required, `unit-tests`/`preflight` required only when `emit-ci-workflow --check` exits 0, `enforce_admins` per floor, no force-push/deletions), **merging UP**: it GETs existing protection first and keeps the stronger value per field, so re-asserting is a safe idempotent no-op and a stronger-than-floor setting is preserved, never reconciled down (`scripts/provision-protection.sh` header). The integration floor is create-only or reconcile-UP for the same reason — it never downgrades, it refuses.
 - **Remote step needing repo-admin** — 🔴 blocked-on-precondition when Step 0 flagged `gh` or the token lacks repo-admin (the script probes admin permission before any write and hard-stops with a clear message on insufficient scope).
-- **Read-back + one retry.** The script's existing post-PUT read-back (GETs the protection and confirms PR-required/`enforce_admins`/status-check contexts) retries the PUT exactly once and re-verifies before halting, instead of halting immediately on the first mismatch — bounding the same eventual-consistency risk the other three steps guard against. The `enforce_admins` assertion checks the value the running floor wrote (`true` at release, `false` at integration), not a fixed `true`.
+- **Read-back + one retry.** The script's existing post-PUT read-back (GETs the protection and confirms PR-required/`enforce_admins`, `allow_force_pushes` and `allow_deletions` both `false`, and status-check contexts when checks were added) retries the PUT exactly once and re-verifies before halting, instead of halting immediately on the first mismatch — bounding the same eventual-consistency risk the other three steps guard against. The `enforce_admins` assertion checks the value the running floor wrote (`true` at release, `false` at integration), not a fixed `true`.

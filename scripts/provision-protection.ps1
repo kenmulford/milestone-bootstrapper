@@ -7,8 +7,8 @@
 #   carries the suite's server-side safety floor, so the milestone-driver gates
 #   hold even when a local hook is bypassed or absent. It asserts, via the GitHub
 #   API, that on the target branch: direct pushes are blocked, a pull request is
-#   required before merge, and the CI status checks #11 emits ('unit-tests' and
-#   'preflight') must pass. Re-asserting the same protection is a safe no-op, so
+#   required before merge, and, when ci.yml is the current generated file, the
+#   CI checks 'unit-tests' and 'preflight' must pass. Re-asserting the same protection is a safe no-op, so
 #   `apply` and `update` may run it repeatedly. It NEVER weakens or removes
 #   protection it did not author — it GETs the existing protection first and
 #   merges the floor in per field, taking the STRONGER value, so a re-apply onto
@@ -51,9 +51,10 @@
 #       MAX(existing, 0). The floor REQUIRES a PR before merge but imposes no
 #       human-approval gate (floor 0); an existing 2-approval rule is NOT lowered
 #       (a review requirement is optional and is not imposed; BRIEF.md:50).
-#   - required_status_checks.contexts = UNION(existing contexts, the #11 CI job
-#       names 'unit-tests'/'preflight') — the floor contexts are added, any
-#       existing extra contexts are kept. strict = (existing.strict OR false) =
+#   - required_status_checks.contexts = UNION(existing contexts, 'unit-tests'/
+#       'preflight' when ci.yml is the current generated file, else nothing) — any
+#       existing extra contexts are kept; with none existing and none added the
+#       field is null. strict = (existing.strict OR false) =
 #       existing is preserved (the floor never turns OFF require-up-to-date).
 #   - enforce_admins = the FLOOR'S value: true for `-Floor release` (existing
 #       cannot exceed true — admins cannot bypass, the key hardening signal);
@@ -68,12 +69,13 @@
 #       repo with no allowlist this is null.
 #
 # The required status-check contexts are SOURCED, never guessed:
-#   the contexts are the stable job names #11 registers. They are read from the
-#   emitted .github/workflows/ci.yml when present; absent that file, the canonical
-#   contract names ('unit-tests' / 'preflight') are used — the exact strings #11's
-#   emit-ci-workflow.ps1 hard-codes (emit-ci-workflow.sh:84-85,214-224) and shares
-#   with #12 as a contract. If neither source yields any context, this fails with
-#   a clear message rather than registering an empty or guessed context.
+#   only the checks the plugin generates are required. This asks
+#   `emit-ci-workflow.ps1 -Check` whether ci.yml is the current generated file; on
+#   exit 0 'unit-tests' and 'preflight' are required (the exact job names the
+#   emitter writes, which run on PRs into both branches). On exit 3 (hand-written,
+#   outdated generated, or no ci.yml) no check is added: existing required checks
+#   are kept and listed with 🔴, and none are ever removed. Any other exit fails
+#   with the emitter's error and changes no protection.
 #
 # The protection target is SOURCED, never chosen:
 #   `-Floor release` reads `protectedBranch`; `-Floor integration` reads
@@ -122,9 +124,11 @@
 # Exit 0 = protection asserted / already correct (or previewed) — or the
 #          integration floor was not opted in (reported no-op, nothing changed).
 # Exit 1 = precondition unmet / config missing / unknown -Floor or
-#          integrationProtection value / repo-admin scope absent / branch or CI
-#          contexts missing / integration floor REFUSED on an enforce_admins:true
-#          branch (nothing changed).
+#          integrationProtection value / repo-admin scope absent / branch
+#          missing / emit-ci-workflow.ps1 -Check failed (exit 1 or 2) /
+#          integration floor REFUSED on an enforce_admins:true branch
+#          (nothing changed). A missing ci.yml is not an exit 1: no checks are
+#          added, a 🔴 line says why, and the run continues.
 # Exit 2 = GitHub API failure mid-step (reports the failing endpoint; nothing weakened).
 
 [CmdletBinding()]
@@ -243,37 +247,47 @@ if ($Floor -eq 'release') {
     $noopAdminsSuffix = "; $adminsNote"
 }
 
-# --- Resolve the required status-check contexts (#11's CI job names) ----------
-# Sourced, never guessed. Prefer the emitted ci.yml's job names; absent that file,
-# fall back to the contract names #11 hard-codes. Either way the contexts are the
-# stable strings #11/#12 share — never an empty or invented context.
-#
-# ci.yml is emitted by emit-ci-workflow, which ALWAYS writes both the 'unit-tests'
-# and 'preflight' jobs (a missing command becomes a [TBD] step that fails loudly;
-# the job name — and thus the context — never drifts). So the job keys under
-# `jobs:` are the authoritative contexts when the file exists.
-$canonicalContexts = @('unit-tests', 'preflight')
+# --- Resolve the required status-check contexts (asked of the generator) ------
+# Only the checks the plugin generates are required: it knows their names and that
+# they run on PRs into both branches. Hand-written CI cannot be known to report
+# (shared workflows, summary jobs and matrix jobs change what GitHub reports), so
+# this asks the sibling emitter whether ci.yml is the current generated file.
+# Exit 0 -> 'unit-tests' and 'preflight' are required. Exit 3 (hand-written,
+# outdated generated, or no ci.yml) -> no checks are added; existing required
+# checks are kept by the merge below, never removed. Any other exit -> fail.
 $ciWorkflow = Join-Path (Join-Path (Join-Path ($Repo.TrimEnd('/','\')) '.github') 'workflows') 'ci.yml'
 
 $contexts = @()
-if (Test-Path -LiteralPath $ciWorkflow -PathType Leaf) {
-    # Read the keys directly under the top-level `jobs:` mapping. The emitter writes
-    # each job as a 2-space-indented `<name>:` line inside the `jobs:` block; parse
-    # exactly that shape and stop at the next top-level key.
-    $inJobs = $false
-    foreach ($line in (Get-Content -LiteralPath $ciWorkflow)) {
-        if ($line -match '^jobs:\s*$') { $inJobs = $true; continue }
-        if ($inJobs -and $line -match '^\S') { $inJobs = $false }
-        if ($inJobs -and ($line -match '^  ([A-Za-z0-9_.-]+):\s*$')) {
-            $contexts += $Matches[1]
-        }
-    }
-    if ($contexts.Count -eq 0) {
-        Fail "🔴 found $ciWorkflow but could not read any CI job name from its 'jobs:' block. The required status-check context is the #11 CI job name; re-emit the CI workflow (issue #11) and re-run rather than guessing a context. No protection changed."
+$addsChecks = $false
+$ciCause = ''
+# The child runs as its own pwsh process: the emitter writes via
+# [Console]::Error, which PowerShell redirection cannot capture in-process.
+# 'Continue' inside the block keeps a PowerShell 7.0/7.1 host from turning the
+# child's redirected stderr into a terminating error under 'Stop'.
+$checkOut = @(& {
+    $ErrorActionPreference = 'Continue'
+    & (Get-Process -Id $PID).Path -NoProfile -File (Join-Path $PSScriptRoot 'emit-ci-workflow.ps1') -Repo $Repo -Check 2>&1
+})
+$checkRc = $LASTEXITCODE
+if ($checkRc -eq 0) {
+    $contexts = @('unit-tests', 'preflight')
+    $addsChecks = $true
+} elseif ($checkRc -eq 3) {
+    if (-not (Test-Path -LiteralPath $ciWorkflow -PathType Leaf)) {
+        $ciCause = 'absent'
+    } elseif (Select-String -LiteralPath $ciWorkflow -SimpleMatch -CaseSensitive -Quiet -Pattern 'Emitted by milestone-bootstrapper') {
+        $ciCause = 'outdated generated'
+    } else {
+        $ciCause = 'hand-written'
     }
 } else {
-    # No emitted workflow yet: use the contract names #11/#12 share verbatim.
-    $contexts = $canonicalContexts
+    # Exit 1/2 (bad driver.json, unwritable path) or a missing emitter is not a
+    # verdict on ci.yml, so it must not read as hand-written CI.
+    [Console]::Error.WriteLine("milestone-bootstrapper: 🔴 emit-ci-workflow.ps1 -Check failed (exit $checkRc); no protection changed.")
+    foreach ($rec in $checkOut) {
+        if ($rec -is [System.Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($rec.ToString()) }
+    }
+    exit 1
 }
 
 # --- Resolve owner/repo once (all protection ops are keyed on it) -------------
@@ -340,8 +354,8 @@ if ($Floor -eq 'integration' -and $current -ne 'null') {
 # enforce_admins, required_pull_request_reviews, restrictions. The PUT uses bare
 # booleans (the GET response wraps them as {"enabled": ...}); the merge reads the
 # wrapped GET shape and emits this flat plan shape. Per field, STRONGER wins:
-#   - required_status_checks.contexts = UNION(existing, <#11 job names>)  (add the
-#       floor contexts, keep existing extras); strict = existing OR false (preserve
+#   - required_status_checks.contexts = UNION(existing, generated job names)  (add
+#       them only when generated, keep existing extras); strict = existing OR false (preserve
 #       an existing require-up-to-date, never turn it off).
 #   - required_pull_request_reviews.required_approving_review_count = MAX(existing,
 #       0)  (PR required; never lower an existing approval requirement).
@@ -353,12 +367,16 @@ if ($Floor -eq 'integration' -and $current -ne 'null') {
 # This jq program is shared byte-for-byte with provision-protection.sh, so both
 # emit an identical PUT body from identical inputs. $contextsJson is joined to one
 # line so it is a single --argjson argument.
-$contextsJson = (($contexts | jq -R . | jq -s .) -join "`n")
+if ($addsChecks) { $contextsJson = (($contexts | jq -R . | jq -s .) -join "`n") } else { $contextsJson = '[]' }
 $mergeFilter = '. as $cur | {
-  required_status_checks: {
-    strict: (($cur.required_status_checks.strict) // false),
-    contexts: ((($cur.required_status_checks.contexts) // []) + $contexts | unique)
-  },
+  required_status_checks: (
+    if ($cur.required_status_checks) == null and ($contexts | length) == 0 then null
+    else {
+      strict: (($cur.required_status_checks.strict) // false),
+      contexts: ((($cur.required_status_checks.contexts) // []) + $contexts | unique)
+    }
+    end
+  ),
   enforce_admins: $enforceAdmins,
   required_pull_request_reviews: {
     required_approving_review_count: ([ (($cur.required_pull_request_reviews.required_approving_review_count) // 0), 0 ] | max)
@@ -377,25 +395,29 @@ $mergeFilter = '. as $cur | {
 }'
 $putBody = (($current | jq --argjson contexts $contextsJson --argjson enforceAdmins $enforceAdmins $mergeFilter) -join "`n")
 
-# Normalize the existing protection into the same flat PUT shape (no floor added,
-# no UNION/MAX) so an exact match against the merged target means "already at or
-# above the floor" — a true no-op. The two filters differ ONLY in that the merge
-# unions the floor contexts and floors the approval count; when the existing
-# state already meets the floor, that addition is empty and the shapes are equal.
-# enforce_admins is emitted as the FLOOR'S value here (structurally hardcoded, not
-# read from $cur, exactly as before) — substituting the same $enforceAdmins keeps
-# release semantics byte-identical while making the integration comparison
-# meaningful: the only enforce_admins state that reaches this line at the
-# integration floor is `false`, since `true` already refused above.
+# Normalize the existing protection into the same flat PUT shape, every field read
+# from $cur as it is (absent -> null or false, no floor value filled in), so an
+# exact match against the merged target means "already at or above the floor" — a
+# true no-op. Filling a floor value in here would hide a missing PR rule, an
+# allowed force push or deletion, or a 404 (no protection at all) whenever the
+# merge adds no checks, and the PUT would be skipped.
 $normalizeFilter = '. as $cur | {
-  required_status_checks: {
-    strict: (($cur.required_status_checks.strict) // false),
-    contexts: ((($cur.required_status_checks.contexts) // []) | unique)
-  },
-  enforce_admins: $enforceAdmins,
-  required_pull_request_reviews: {
-    required_approving_review_count: (($cur.required_pull_request_reviews.required_approving_review_count) // 0)
-  },
+  required_status_checks: (
+    if ($cur.required_status_checks) == null then null
+    else {
+      strict: (($cur.required_status_checks.strict) // false),
+      contexts: ((($cur.required_status_checks.contexts) // []) | unique)
+    }
+    end
+  ),
+  enforce_admins: (($cur.enforce_admins.enabled) // false),
+  required_pull_request_reviews: (
+    if ($cur.required_pull_request_reviews) == null then null
+    else {
+      required_approving_review_count: (($cur.required_pull_request_reviews.required_approving_review_count) // 0)
+    }
+    end
+  ),
   restrictions: (
     if ($cur.restrictions) == null then null
     else {
@@ -405,12 +427,38 @@ $normalizeFilter = '. as $cur | {
     }
     end
   ),
-  allow_force_pushes: false,
-  allow_deletions: false
+  allow_force_pushes: (($cur.allow_force_pushes.enabled) // false),
+  allow_deletions: (($cur.allow_deletions.enabled) // false)
 }'
 
 # The contexts the merged PUT actually carries (UNION result), for display.
-$contextsDisplay = (($putBody | jq -r '.required_status_checks.contexts | join(", ")') -join "`n")
+$contextsDisplay = (($putBody | jq -r '(.required_status_checks.contexts // []) | if length == 0 then "none" else join(", ") end') -join "`n")
+
+# --- Say so when no checks are added (stderr; exit status unchanged) -----------
+# Existing required checks are kept by the merge, so list them for the human to
+# confirm each one reports on PRs into this branch.
+if (-not $addsChecks) {
+    switch ($ciCause) {
+        'absent' {
+            $ciNote = '.github/workflows/ci.yml is absent. Run update (or apply) to create it.'
+            $ciDesc = 'a missing ci.yml'
+        }
+        'outdated generated' {
+            $ciNote = '.github/workflows/ci.yml is an outdated generated file. Review the diff with emit-ci-workflow.ps1 -Check, then delete it and re-run update (or apply), which recreates it; local edits to it are lost.'
+            $ciDesc = 'an outdated generated ci.yml'
+        }
+        default {
+            $ciNote = '.github/workflows/ci.yml is hand-written. Run emit-ci-workflow.ps1 -Check to print the diff.'
+            $ciDesc = 'hand-written CI'
+        }
+    }
+    [Console]::Error.WriteLine("milestone-bootstrapper: 🔴 no required checks added: $ciNote")
+    $existingContexts = @(@($current | jq -r '(.required_status_checks.contexts // [])[]') | Where-Object { $_ })
+    if ($existingContexts.Count -gt 0) {
+        [Console]::Error.WriteLine("🔴 milestone-bootstrapper does not manage required checks for $ciDesc. Confirm each of these reports on PRs into ``$targetBranch``. To remove one: ``gh api -X DELETE repos/$slug/branches/$targetBranch/protection/required_status_checks/contexts -f 'contexts[]=<name>'``")
+        foreach ($ctx in $existingContexts) { [Console]::Error.WriteLine("  $ctx") }
+    }
+}
 
 # --- Preview (-DryRun): print the exact MERGED PUT body; write nothing --------
 if ($DryRun) {
@@ -431,7 +479,7 @@ if ($DryRun) {
 # ($a -eq $b) on arrays does COLLECTION FILTERING, not boolean equality, and never
 # detects the no-op. Force a scalar string compare (join the lines, then
 # [string]::Equals) so this matches the bash twin's [ "$NORM" = "$PUT" ] exactly.
-$normCurrent = (($current | jq --argjson enforceAdmins $enforceAdmins $normalizeFilter) -join "`n")
+$normCurrent = (($current | jq $normalizeFilter) -join "`n")
 if ([string]::Equals($normCurrent, $putBody)) {
     Write-Output "milestone-bootstrapper: branch protection already meets the suite floor on $slug branch '$targetBranch' (no change)."
     Write-Output "milestone-bootstrapper: required status checks: $contextsDisplay$noopAdminsSuffix."
@@ -456,20 +504,24 @@ function Invoke-ProtectionPut {
 }
 
 # Test-ProtectionReadBack — the pre-existing acceptance check (same pattern): GETs
-# current protection and confirms all three floors (PR required, enforce_admins,
-# status-check contexts present). enforce_admins is asserted EQUAL TO THE FLOOR'S
+# current protection and confirms the floors (PR required, enforce_admins, force
+# pushes and deletions disallowed, and status-check contexts present only when
+# this run added the generated checks). enforce_admins is asserted EQUAL TO THE FLOOR'S
 # value ($enforceAdmins) rather than hardcoded 'true', so release still verifies
 # `true` and integration verifies the `false` it just wrote — an assertion that
 # would otherwise fail on every integration run. Sets $script:prRequired/
-# $script:adminsEnforced/$script:hasContexts for the caller's message; returns
+# $script:adminsEnforced/$script:forcePushes/$script:deletions/$script:hasContexts
+# for the caller's message; returns
 # $false on a failed GET or a floor not holding.
 function Test-ProtectionReadBack {
     $verify = (gh api "repos/$slug/branches/$targetBranch/protection" 2>$null)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($verify)) { return $false }
     $script:prRequired = ($verify | jq -r 'if .required_pull_request_reviews == null then "no" else "yes" end')
     $script:adminsEnforced = ($verify | jq -r '.enforce_admins.enabled // false')
+    $script:forcePushes = ($verify | jq -r '.allow_force_pushes.enabled // false')
+    $script:deletions = ($verify | jq -r '.allow_deletions.enabled // false')
     $script:hasContexts = ($verify | jq -r '(.required_status_checks.contexts // []) | length')
-    return (($script:prRequired -eq 'yes') -and ($script:adminsEnforced -eq $enforceAdmins) -and ([int]$script:hasContexts -ne 0))
+    return (($script:prRequired -eq 'yes') -and ($script:adminsEnforced -eq $enforceAdmins) -and ($script:forcePushes -eq 'false') -and ($script:deletions -eq 'false') -and (-not $addsChecks -or [int]$script:hasContexts -ne 0))
 }
 
 if (-not (Invoke-ProtectionPut)) {
@@ -482,14 +534,14 @@ if (-not (Invoke-ProtectionPut)) {
 # (Test-ProtectionReadBack, unchanged), now wrapped with exactly ONE retry
 # (re-PUT once, re-verify) before falling into the halt below — never a second
 # retry (`.project/design-philosophy.md#Error & failure philosophy`).
-$prRequired = 'unknown'; $adminsEnforced = 'unknown'; $hasContexts = 'unknown'
+$prRequired = 'unknown'; $adminsEnforced = 'unknown'; $forcePushes = 'unknown'; $deletions = 'unknown'; $hasContexts = 'unknown'
 if (-not (Test-ProtectionReadBack)) {
     Write-Output "milestone-bootstrapper: branch-protection read-back drift on '$targetBranch' — retrying once (re-PUT, re-verify)."
     if (-not (Invoke-ProtectionPut)) {
         ApiFail "retry failed: could not re-assert branch protection on '$slug' branch '$targetBranch' (PUT repos/$slug/branches/$targetBranch/protection). No protection was weakened or removed. Re-run after resolving the error."
     }
     if (-not (Test-ProtectionReadBack)) {
-        ApiFail "asserted protection but the read-back still does not show all three floors after one retry (PR required=$prRequired, enforce_admins=$adminsEnforced, status-check contexts=$hasContexts) on '$targetBranch'. Re-run to confirm."
+        ApiFail "asserted protection but the read-back still does not show the floors after one retry (PR required=$prRequired, enforce_admins=$adminsEnforced, allow_force_pushes=$forcePushes, allow_deletions=$deletions, status-check contexts=$hasContexts) on '$targetBranch'. Re-run to confirm."
     }
 }
 
